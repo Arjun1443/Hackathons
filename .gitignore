@@ -1,25 +1,19 @@
+# Secrets and keys
+.env
+.streamlit/secrets.toml
+*.key
+*.pem
+
 # Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-
-# Environment files
-.env
-.streamlit/secrets.toml
-
-# Virtual environment
 venv/
 env/
-ENV/
+.venv/
 
 # IDE
 .vscode/
 .idea/
 
-# Chat history
-chat_history.json
-
-# OS files
-.DS_Store
-Thumbs.db
+# Streamlit
+.streamlit/cache/
