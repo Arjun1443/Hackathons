@@ -65,6 +65,14 @@ class PublishingTests(unittest.TestCase):
         self.assertFalse(at.exception, [x.message for x in at.exception])
         return at
 
+    def test_linkedin_preview_uses_personal_voice(self):
+        at = self.composer()
+        self.assertTrue(next(x for x in at.text_area if x.label=='Post content').value.startswith("I'm hiring:"))
+        self.assertEqual(at.button(key='publish_LinkedIn').label, 'Post from my LinkedIn profile')
+        self.assertTrue(any('Your personal LinkedIn profile' in x.value for x in at.caption))
+        next(x for x in at.selectbox if x.label=='Post preview platform').select('Indeed').run()
+        self.assertTrue(next(x for x in at.text_area if x.label=='Post content').value.startswith("We're hiring:"))
+
     def test_preview_publishes_only_on_click_and_prevents_duplicate(self):
         at = self.composer()
         self.assertTrue(at.button(key='publish_LinkedIn').disabled)

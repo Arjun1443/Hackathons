@@ -92,6 +92,8 @@ def render_job_post_composer(result, selected_platform=None):
         st.session_state['job_compose_platform'] = platforms[0]
     platform = st.selectbox('Post preview platform', platforms, key='job_compose_platform')
     source = result['description']
+    if platform == 'LinkedIn' and source.startswith("We're hiring:"):
+        source = source.replace("We're hiring:", "I'm hiring:", 1)
     source_hash = hashlib.sha256(source.encode()).hexdigest()
     editor_key = 'posting_text_' + platform
     drafts = st.session_state.setdefault('job_platform_drafts', {})
@@ -113,8 +115,8 @@ def render_job_post_composer(result, selected_platform=None):
             st.info('Naukri publishing is not connected. Obtain employer posting API access and integration details from your Naukri account manager. No job has been submitted.')
         st.button('Post to ' + platform, disabled=True, key='publish_' + platform)
         return
-    st.caption('Publishes a public hiring post to your LinkedIn member feed. LinkedIn Jobs listings and company-page publishing require separate integrations.')
-    with st.expander('Connect your LinkedIn member account'):
+    st.caption('Your personal LinkedIn profile will appear as the author of this public hiring post.')
+    with st.expander('Connect your personal LinkedIn profile'):
         st.markdown('Use a LinkedIn Developer app with **Share on LinkedIn** and a member-authorized token with **w_member_social**. This is a LinkedIn credential, separate from Groq. Never enter your LinkedIn password.')
         st.link_button('LinkedIn authorization setup', 'https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin')
         st.button('Clear LinkedIn credentials', on_click=clear_linkedin_credentials, args=(st.session_state,))
@@ -137,7 +139,7 @@ def render_job_post_composer(result, selected_platform=None):
                 previous = None
     disabled = not token.strip() or not author.strip() or not text.strip() or len(text.strip()) > 3000 or previous is not None
     st.caption(f'{len(text.strip()):,} / 3,000 characters')
-    if st.button('Post to LinkedIn feed', key='publish_LinkedIn', disabled=disabled):
+    if st.button('Post from my LinkedIn profile', key='publish_LinkedIn', disabled=disabled):
         # The attempt precedes the request. Reruns cannot silently resubmit it.
         attempts[fingerprint] = {'status': 'pending'}
         try:

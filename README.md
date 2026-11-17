@@ -192,13 +192,13 @@ The result provides a copyable description, a text download, and platform logos.
 
 ### LinkedIn feed publishing
 
-The **Post to LinkedIn feed** button sends the reviewed text to LinkedIn's Posts API after you supply your own member authorization. This creates a public hiring post on a member's feed. It does **not** create a LinkedIn Jobs listing or post to a company page.
+The **Post from my LinkedIn profile** button sends the reviewed text to LinkedIn's Posts API after you supply your own member authorization. This creates a public hiring post authored by your personal profile, with an editable “I'm hiring” opening. It does **not** create a LinkedIn Jobs listing or post to a company page.
 
 1. Create a [LinkedIn Developer app](https://www.linkedin.com/developers/apps) and enable **Share on LinkedIn**.
 2. Complete LinkedIn member OAuth authorization requesting **w_member_social**. Follow [LinkedIn's authorization guide](https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin). App access and API permissions still depend on LinkedIn approval.
 3. Obtain the Person URN of the member who authorized the token, using the identity flow described in that guide. Do not use a company URN or another person's ID.
 4. In the preview, expand **Connect your LinkedIn member account**. Enter the member-authorized access token and Person URN. Do not enter your password or Groq key.
-5. Review the exact post text, keep it within 3,000 characters, then click **Post to LinkedIn feed**.
+5. Review the exact post text, keep it within 3,000 characters, then click **Post from my LinkedIn profile**.
 
 The integration defaults to API version `202606`, which can be changed in the connection panel. It reports publication only after LinkedIn returns HTTP 201 and a post ID. Tokens stay in the current session's password widget and are not included in agent inputs, report exports, or traces. **Clear LinkedIn credentials** removes the token and Person URN. Use this only over a trusted local connection or HTTPS.
 
