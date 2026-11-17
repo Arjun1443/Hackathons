@@ -178,6 +178,16 @@ For Resume Screener, enter comma-separated required skills and paste each candid
 
 For Productivity Coach, enter 0.25–12 hours and separate priorities with commas or newlines. For Payslip, enter gross salary and total deductions explicitly. Content Marketing returns the chosen template type, including a case-study outline. MVP Builder includes the features entered by the user.
 
+### Job posting with salary
+
+In **HR & People → Job Posting**, enter a minimum and maximum salary, currency, and pay period (year, month, or hour). Add role responsibilities, requirements, benefits, and an application email or careers URL. Choose LinkedIn, Naukri, and/or Indeed, then execute the helper.
+
+The result provides a copyable description, a text download, and buttons to open the selected platform's official employer posting page. Sign in to the employer account, paste the draft, complete any remaining fields, and publish there. These buttons do not prefill or submit forms, purchase listings, or report publication success. A salary range of zero or a minimum above the maximum is rejected.
+
+Automatic publishing is not connected. LinkedIn job-publishing APIs require approved access, and Indeed uses partner integration credentials. A Naukri employer integration would also need a supported posting method and authorized account access. Never paste account passwords into the source code.
+
+References: [LinkedIn job API access](https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview), [Indeed Job Sync API](https://docs.indeed.com/job-sync-api/), [Naukri employer posting](https://www.naukri.com/recruit/job-posting).
+
 ## Idea scoring in `app.py`
 
 The Idea Evaluation tool calculates:

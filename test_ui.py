@@ -26,11 +26,21 @@ class InterfaceTests(unittest.TestCase):
                         widget.set_value('Python, React')
                     elif not widget.value:
                         widget.set_value('Learning, Customer calls')
+                if name == 'Job Posting':
+                    next(x for x in at.number_input if x.label == 'Minimum salary').set_value(60000.0)
+                    next(x for x in at.number_input if x.label == 'Maximum salary').set_value(90000.0)
+                    next(x for x in at.selectbox if x.label == 'Salary period').select('month')
                 execute=next(button for button in at.button if button.label.startswith('🚀 Execute'))
                 execute.click().run()
                 assert not at.exception, (name, [x.message for x in at.exception])
                 assert not at.error, (name, [x.value for x in at.error])
                 assert name in at.session_state['agent_results'], (name,[x.value for x in at.warning])
+                if name == 'Job Posting':
+                    result = at.session_state['agent_results'][name]
+                    assert result['salary']['minimum'] == 60000
+                    assert 'per month' in result['description']
+                    assert len(at.get('link_button')) == 3
+                    assert any(x.label == 'Download job description' for x in at.get('download_button'))
                 at.run()
                 assert any(x.value == '### Result' for x in at.markdown), (name,'Result disappeared on rerun')
                 assert not at.exception, (name, [x.message for x in at.exception])

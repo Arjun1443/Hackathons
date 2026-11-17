@@ -644,57 +644,65 @@ class InvoiceAgent:
 
 # ---------- CATEGORY 4: HR & PEOPLE AGENTS ----------
 class JobPostingAgent:
-    """💼 Creates job postings for LinkedIn and Naukri"""
-    
+    """Prepare a salary-aware job draft and official employer-page handoffs."""
+    PLATFORMS = {
+        "LinkedIn": "https://www.linkedin.com/talent/post-a-job",
+        "Naukri": "https://www.naukri.com/recruit/job-posting",
+        "Indeed": "https://in.indeed.com/hire/post-job",
+    }
+
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("JobPosting", "create", inputs)
-        
-        job_title = inputs.get("job_title", "Software Engineer")
-        company = inputs.get("company", "Your Startup")
-        location = inputs.get("location", "Remote")
-        job_type = inputs.get("job_type", "Full-time")
-        salary = inputs.get("salary", "Best in industry")
-        
-        description = f"""We are seeking a talented {job_title} to join our team at {company}!
+    def execute(inputs):
+        title = required_text(inputs, "job_title")
+        company = required_text(inputs, "company")
+        location = required_text(inputs, "location")
+        currency = inputs.get("salary_currency", "INR")
+        period = inputs.get("salary_period", "year")
+        if currency not in ("INR", "USD", "EUR", "GBP") or period not in ("year", "month", "hour"):
+            raise ValueError("Choose a supported currency and salary period.")
+        minimum = nonnegative(inputs, "salary_min")
+        maximum = nonnegative(inputs, "salary_max")
+        if minimum > maximum:
+            raise ValueError("Minimum salary cannot exceed maximum salary.")
+        if maximum <= 0:
+            raise ValueError("Enter a positive salary or salary range.")
+        salary = f"{currency} {minimum:,.2f} – {maximum:,.2f} per {period}"
+        platforms = inputs.get("posting_platforms", list(JobPostingAgent.PLATFORMS))
+        if not isinstance(platforms, list) or any(x not in JobPostingAgent.PLATFORMS for x in platforms):
+            raise ValueError("Choose LinkedIn, Naukri, or Indeed.")
+        if not platforms:
+            raise ValueError("Choose at least one posting platform.")
+        responsibilities = str(inputs.get("responsibilities", "")).strip() or "[Add the responsibilities for this role]"
+        requirements = str(inputs.get("requirements", "")).strip() or "[Add the required skills and experience]"
+        benefits = str(inputs.get("benefits", "")).strip() or "[Add the benefits your company actually offers]"
+        application = str(inputs.get("application_contact", "")).strip() or "[Add an application email or careers URL]"
+        description = f"""We're hiring: {title}
 
-📍 Location: {location}
-⏰ Type: {job_type}
-💰 Salary: {salary}
+Company: {company}
+Location: {location}
+Job type: {inputs.get('job_type', 'Full-time')}
+Salary: {salary}
 
-Responsibilities:
-• Develop and maintain core product features
-• Collaborate with cross-functional teams
-• Write clean, scalable code
-• Participate in code reviews
+Responsibilities
+{responsibilities}
 
-Requirements:
-• 2+ years of relevant experience
-• Strong problem-solving skills
-• Excellent communication
-• Bachelor's degree in CS or related field
+Required skills and experience
+{requirements}
 
-Benefits:
-• Competitive salary + equity
-• Flexible work hours
-• Health insurance
-• Learning budget
+Benefits
+{benefits}
 
-Apply: [Enter your application email]"""
-        
-        linkedin_url = f"https://www.linkedin.com/sharing/share-offsite/?text={urllib.parse.quote(description[:1000])}"
-        
-        arize.log_metric("job_post_created", 1)
-        arize.end_trace({"title": job_title})
-        
-        return {
-            "job_title": job_title,
+How to apply
+{application}
+"""
+        return traced_result("JobPosting", inputs, {
+            "job_title": title, "company": company, "location": location,
+            "salary": {"minimum": minimum, "maximum": maximum, "currency": currency, "period": period, "display": salary},
             "description": description,
-            "linkedin_url": linkedin_url,
-            "naukri_url": "https://www.naukri.com/recruiters/login",
-            "application_email": "[Enter your application email]",
-            "next_action": "Post to job boards and start screening candidates"
-        }
+            "posting_options": [{"platform": name, "url": JobPostingAgent.PLATFORMS[name], "status": "not_published"} for name in dict.fromkeys(platforms)],
+            "output_mode": "Job draft only. Copy the description and open a platform to finish posting in your employer account.",
+            "next_action": "Review the draft, copy it, and publish on the selected platform. Direct publishing is not connected."
+        })
 
 
 class ResumeScreeningAgent:
@@ -1440,6 +1448,20 @@ if selected_agent:
         with col2:
             inputs["location"] = st.text_input("Location", "Remote")
         inputs["job_type"] = st.selectbox("Job Type", ["Full-time", "Part-time", "Contract"])
+        st.markdown("#### Salary")
+        salary_cols = st.columns(2)
+        with salary_cols[0]:
+            inputs["salary_min"] = st.number_input("Minimum salary", min_value=0.0, value=500000.0, step=1000.0)
+            inputs["salary_currency"] = st.selectbox("Salary currency", ["INR", "USD", "EUR", "GBP"])
+        with salary_cols[1]:
+            inputs["salary_max"] = st.number_input("Maximum salary", min_value=0.0, value=800000.0, step=1000.0)
+            inputs["salary_period"] = st.selectbox("Salary period", ["year", "month", "hour"])
+        inputs["responsibilities"] = st.text_area("Role responsibilities", placeholder="Describe what the employee will do")
+        inputs["requirements"] = st.text_area("Required skills and experience", placeholder="Enter the skills and experience you need")
+        inputs["benefits"] = st.text_area("Benefits offered", placeholder="List only benefits your company provides")
+        inputs["application_contact"] = st.text_input("Application email or careers URL")
+        inputs["posting_platforms"] = st.multiselect("Posting platforms", list(JobPostingAgent.PLATFORMS), default=list(JobPostingAgent.PLATFORMS))
+        st.caption("Buttons open each platform's employer posting page. Sign in, paste the draft, and publish there. The app does not automatically fill or submit their forms.")
     
     elif selected_agent == "Resume Screener":
         inputs["job_requirements"] = st.text_area("Required skills (comma-separated)", placeholder="Python, React, AWS")
@@ -1547,8 +1569,17 @@ if selected_agent:
     if result is not None:
         st.markdown("### Result")
         st.info(result["output_mode"])
+        if selected_agent == "Job Posting":
+            st.markdown("#### Job description")
+            st.caption("Use the copy icon at the top-right of the draft, then choose a platform below.")
+            st.code(result["description"], language=None, wrap_lines=True)
+            st.download_button("Download job description", result["description"], "job_description.txt", mime="text/plain", key="download_job_description")
+            st.markdown("#### Create a job posting")
+            for option in result.get("posting_options", []):
+                st.link_button(f"Open {option['platform']} job posting", option["url"])
+            st.caption("Status: draft only. Opening a platform does not publish the job. No posting API integration is connected.")
         for key, value in result.items():
-            if key in ("output_mode", "arize_traces"):
+            if key in ("output_mode", "arize_traces") or selected_agent == "Job Posting" and key in ("description", "posting_options"):
                 continue
             st.markdown(f"**{key.replace('_', ' ').title()}**")
             if key.endswith("_html"):

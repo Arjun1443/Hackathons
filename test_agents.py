@@ -52,7 +52,7 @@ class AgentTests(unittest.TestCase):
         return self.demo[name].execute(inputs)
 
     def test_all_24_helpers_return_serializable_results(self):
-        inputs = dict(skills='Python, AI', budget='5000', industry='SaaS', country='India', interests='learning', idea_name='Learning assistant', problem='Tracking learning progress', business_type='B2B SaaS', idea='Learnflow', document_type='NDA', company_name='Learnflow', brand_name='Learnflow', revenue=100000, expenses=40000, tax_rate=20, monthly_burn=50000, cash_balance=500000, monthly_revenue=10000, client_name='Client', amount=5000, description='Training', job_title='Trainer', company='Learnflow', location='Remote', job_type='Contract', job_requirements='Python, ML', resumes='Naga\nPython and ML trainer', employee_name='Naga', salary=50000, deductions=1000, month='November 2026', role='Trainer', lead_name='Client', lead_score=75, prospect_name='Client', value_prop='training', topic='Learning', content_type='Blog Post', growth_rate=50, profit_margin=20, product_type='AI App', features='document search, citations', zodiac='Leo', score=65, work_hours=2, priorities='Customer calls, Product development')
+        inputs = dict(skills='Python, AI', budget='5000', industry='SaaS', country='India', interests='learning', idea_name='Learning assistant', problem='Tracking learning progress', business_type='B2B SaaS', idea='Learnflow', document_type='NDA', company_name='Learnflow', brand_name='Learnflow', revenue=100000, expenses=40000, tax_rate=20, monthly_burn=50000, cash_balance=500000, monthly_revenue=10000, client_name='Client', amount=5000, description='Training', job_title='Trainer', company='Learnflow', location='Remote', job_type='Contract', job_requirements='Python, ML', resumes='Naga\nPython and ML trainer', employee_name='Naga', salary=50000, salary_min=500000, salary_max=800000, deductions=1000, month='November 2026', role='Trainer', lead_name='Client', lead_score=75, prospect_name='Client', value_prop='training', topic='Learning', content_type='Blog Post', growth_rate=50, profit_margin=20, product_type='AI App', features='document search, citations', zodiac='Leo', score=65, work_hours=2, priorities='Customer calls, Product development')
         self.assertEqual(len(self.demo['AGENTS']), 24)
         for name, info in self.demo['AGENTS'].items():
             with self.subTest(agent=name):
@@ -60,6 +60,24 @@ class AgentTests(unittest.TestCase):
                 self.assertIsInstance(result, dict)
                 self.assertTrue(result.get('next_action'))
                 json.dumps(result, allow_nan=False)
+
+    def test_job_posting_salary_and_platform_options(self):
+        result = self.execute('JobPostingAgent', job_title='AI Trainer', company='AIQUBIX', location='Remote', salary_min=60000, salary_max=90000, salary_currency='INR', salary_period='month', responsibilities='Teach Python', requirements='Python and ML', benefits='Flexible hours', application_contact='hiring@example.com')
+        self.assertIn('INR 60,000.00 – 90,000.00 per month', result['description'])
+        self.assertIn('Teach Python', result['description'])
+        self.assertIn('hiring@example.com', result['description'])
+        self.assertEqual([x['platform'] for x in result['posting_options']], ['LinkedIn', 'Naukri', 'Indeed'])
+        self.assertTrue(all(x['status']=='not_published' for x in result['posting_options']))
+        self.assertNotIn('sharing/share-offsite', result['posting_options'][0]['url'])
+
+    def test_job_posting_rejects_invalid_salary_and_platforms(self):
+        base = dict(job_title='Trainer', company='AIQUBIX', location='Remote', salary_min=100, salary_max=200)
+        for changes in ({'salary_min':300}, {'salary_min':-1}, {'salary_max':float('inf')}, {'posting_platforms':[]}, {'posting_platforms':['Unknown']}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                self.execute('JobPostingAgent', **(base | changes))
+        result = self.execute('JobPostingAgent', **(base | {'posting_platforms':['Indeed']}))
+        self.assertEqual(len(result['posting_options']), 1)
+        self.assertEqual(result['posting_options'][0]['platform'], 'Indeed')
 
     def test_productivity_uses_full_priorities_and_exact_budget(self):
         result = self.execute('ProductivityCoachAgent', work_hours=2, priorities='Product development, Customer calls')
