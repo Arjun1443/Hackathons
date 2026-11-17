@@ -734,13 +734,13 @@ Benefits
             "salary": {"minimum": minimum, "maximum": maximum, "currency": currency, "period": period, "display": salary},
             "description": description,
             "posting_options": [{"platform": name, "url": JobPostingAgent.PLATFORMS[name], "status": "not_published"} for name in dict.fromkeys(platforms)],
-            "output_mode": "Job draft only. Copy the description and open a platform to finish posting in your employer account.",
-            "next_action": "Review the draft, copy it, and publish on the selected platform. Direct publishing is not connected."
+            "output_mode": "Job draft ready. Choose a platform to review and edit its post. Publication status appears in the platform preview.",
+            "next_action": "Review the platform preview. LinkedIn feed publishing needs member authorization; Naukri and Indeed employer integrations remain unconnected."
         })
 
 
 def job_posting_logo_html(platform):
-    """Accessible logo link to a known employer page, always in a new tab."""
+    """Accessible logo link with an official-site fallback; the composer handles clicks."""
     if platform not in JobPostingAgent.PLATFORMS:
         raise ValueError("Unsupported posting platform.")
     url = html.escape(JobPostingAgent.PLATFORMS[platform], quote=True)
@@ -749,7 +749,7 @@ def job_posting_logo_html(platform):
     return (
         f'<a class="job-posting-icon" data-job-platform="{name}" '
         f'href="{url}" target="_blank" rel="noopener noreferrer" '
-        f'aria-label="Create a job on {name} (opens in a new tab)" '
+        f'aria-label="Prepare a {name} post preview" '
         'style="display:flex;flex-direction:column;align-items:center;justify-content:center;'
         'gap:12px;min-height:140px;padding:20px;border:1px solid #CBD5E1;'
         'border-radius:12px;background:#FFFFFF;color:#082E60;text-decoration:none;font-weight:600;">'
@@ -1525,7 +1525,7 @@ if selected_agent:
                     st.error("AI drafting could not complete. Check the Groq key, quota, and connection, then retry. Your existing text was kept.")
             inputs[field] = st.text_area(label, key=field_key, height=160)
         inputs["posting_platforms"] = st.multiselect("Posting platforms", list(JobPostingAgent.PLATFORMS), default=list(JobPostingAgent.PLATFORMS))
-        st.caption("Buttons open each platform's employer posting page. Sign in, paste the draft, and publish there. The app does not automatically fill or submit their forms.")
+        st.caption("Generate the draft, then select a platform logo to review its content and publishing connection.")
     
     elif selected_agent == "Resume Screener":
         inputs["job_requirements"] = st.text_area("Required skills (comma-separated)", placeholder="Python, React, AWS")
@@ -1645,7 +1645,27 @@ if selected_agent:
                 for column, option in zip(portal_columns, posting_options):
                     with column:
                         st.markdown(job_posting_logo_html(option["platform"]), unsafe_allow_html=True)
-            st.caption("Click a logo to open that platform in a new tab. Sign in, paste your copied job description, complete the remaining fields, and publish there. Opening a page does not publish the draft.")
+            # Capture logo clicks and open an editable publishing preview in-app.
+            from job_publishing import render_job_post_composer
+            logo_interaction = st.components.v2.component(
+                "foundersagent.job_post_icons",
+                js="""
+                export default function(component) {
+                    const { setTriggerValue } = component;
+                    document.querySelectorAll('a.job-posting-icon').forEach((link) => {
+                        link.onclick = (event) => {
+                            event.preventDefault();
+                            setTriggerValue('clicked', link.getAttribute('data-job-platform'));
+                        };
+                    });
+                }
+                """,
+                isolate_styles=False,
+            )
+            logo_click = logo_interaction(on_clicked_change=lambda: None, key="job_platform_logo_click")
+            st.caption("Click a logo to prepare its editable post below. Publishing requires a connection to that platform.")
+            render_job_post_composer(result, getattr(logo_click, "clicked", None))
+
         for key, value in result.items():
             if key in ("output_mode", "arize_traces") or selected_agent == "Job Posting" and key in ("description", "posting_options"):
                 continue

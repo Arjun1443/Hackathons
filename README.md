@@ -188,11 +188,32 @@ In **HR & People → Job Posting**, enter a minimum and maximum salary, currency
 
 AI drafting uses the existing `GROQ_API_KEY` from `.env` or deployment secrets and the `openai/gpt-oss-20b` model. It runs only when a draft button is clicked, uses the entered job context and current text, and replaces only the chosen section. Missing credentials or request failures leave the existing text intact. Manual editing and the rest of the extended application do not require a key. Review benefits suggestions before offering them to candidates.
 
-The result provides a copyable description, a text download, and buttons to open the selected platform's official employer posting page. Sign in to the employer account, paste the draft, complete any remaining fields, and publish there. These buttons do not prefill or submit forms, purchase listings, or report publication success. A salary range of zero or a minimum above the maximum is rejected.
+The result provides a copyable description, a text download, and platform logos. Click a logo to open an editable platform preview within the app. The selector below the logos is an accessible fallback if the browser cannot run the logo component. Each platform keeps its own edited draft. Regenerating the source job description resets the previews when next opened.
 
-Automatic publishing is not connected. LinkedIn job-publishing APIs require approved access, and Indeed uses partner integration credentials. A Naukri employer integration would also need a supported posting method and authorized account access. Never paste account passwords into the source code.
+### LinkedIn feed publishing
 
-References: [LinkedIn job API access](https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview), [Indeed Job Sync API](https://docs.indeed.com/job-sync-api/), [Naukri employer posting](https://www.naukri.com/recruit/job-posting).
+The **Post to LinkedIn feed** button sends the reviewed text to LinkedIn's Posts API after you supply your own member authorization. This creates a public hiring post on a member's feed. It does **not** create a LinkedIn Jobs listing or post to a company page.
+
+1. Create a [LinkedIn Developer app](https://www.linkedin.com/developers/apps) and enable **Share on LinkedIn**.
+2. Complete LinkedIn member OAuth authorization requesting **w_member_social**. Follow [LinkedIn's authorization guide](https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin). App access and API permissions still depend on LinkedIn approval.
+3. Obtain the Person URN of the member who authorized the token, using the identity flow described in that guide. Do not use a company URN or another person's ID.
+4. In the preview, expand **Connect your LinkedIn member account**. Enter the member-authorized access token and Person URN. Do not enter your password or Groq key.
+5. Review the exact post text, keep it within 3,000 characters, then click **Post to LinkedIn feed**.
+
+The integration defaults to API version `202606`, which can be changed in the connection panel. It reports publication only after LinkedIn returns HTTP 201 and a post ID. Tokens stay in the current session's password widget and are not included in agent inputs, report exports, or traces. **Clear LinkedIn credentials** removes the token and Person URN. Use this only over a trusted local connection or HTTPS.
+
+The app prevents repeated submission of the same author/text within the browser session. It does not retry POST requests automatically. If a timeout, server error, or missing post ID leaves the outcome uncertain, inspect your LinkedIn feed before explicitly allowing a retry. Session state is not a durable publication log and resets when the session ends.
+
+### Indeed and Naukri connection status
+
+Both platforms have ready-to-edit previews and downloads. Their **Post** buttons remain disabled because the repository does not have approved employer integrations:
+
+- **Indeed:** requires an approved employer/ATS Job Sync integration, OAuth credentials, employer identifiers, and the required job/application metadata. A Groq key or an Indeed website login does not supply this integration.
+- **Naukri:** obtain posting API access, account-specific credentials, and the supported payload/endpoint documentation from your Naukri account manager. The app does not invent an endpoint or submit a job through a website link.
+
+To finish those connections, obtain the employer API access and integration specifications first. Do not send passwords or access tokens in GitHub issues or commits.
+
+References: [LinkedIn Posts API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api), [LinkedIn Jobs API access](https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview), [Indeed Job Sync API](https://docs.indeed.com/job-sync-api/), [Naukri integration setup](https://support.greenhouse.io/hc/en-us/articles/16297968058651-Naukri-integration).
 
 ## Idea scoring in `app.py`
 
@@ -224,6 +245,8 @@ Idea Evaluation reports insufficient evidence instead of scoring when a research
 | [requirements.txt](requirements.txt) | Pinned top-level dependencies for both applications |
 | [test_agents.py](test_agents.py) | Offline logic regressions and a smoke check of all 24 helpers |
 | [test_ui.py](test_ui.py) | Streamlit interaction and report-persistence regressions |
+| [job_publishing.py](job_publishing.py) | Editable platform previews and member-authorized LinkedIn feed publisher |
+| [test_job_publishing.py](test_job_publishing.py) | Offline publication, failure, and credential-isolation checks |
 
 ## Current limitations
 
