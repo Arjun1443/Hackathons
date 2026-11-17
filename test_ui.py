@@ -59,12 +59,12 @@ class InterfaceTests(unittest.TestCase):
 
     @patch.dict(os.environ, clear=False)
     def test_ai_job_sections_remain_editable_and_application_field_is_removed(self):
-        os.environ['DEEPSEEK_API_KEY'] = 'offline-test-placeholder'
+        os.environ['GROQ_API_KEY'] = 'offline-test-placeholder'
         at = AppTest.from_file(str(Path(__file__).with_name('FoundersAgent.py')), default_timeout=20).run()
         at.selectbox[0].select('HR & People').run()
         at.button(key='Job Posting').click().run()
         assert not any(x.label == 'Application email or careers URL' for x in at.text_input)
-        with patch('langchain_deepseek.ChatDeepSeek') as client:
+        with patch('langchain_openai.ChatOpenAI') as client:
             for field, label in [('responsibilities','Role responsibilities'), ('requirements','Required skills and experience'), ('benefits','Benefits offered')]:
                 client.return_value.invoke.return_value = SimpleNamespace(content='Draft for ' + field)
                 at.button(key='job_ai_' + field).click().run()
@@ -96,7 +96,7 @@ class InterfaceTests(unittest.TestCase):
 
     @patch.dict(os.environ, clear=False)
     def test_ai_job_section_missing_key_preserves_manual_text(self):
-        os.environ['DEEPSEEK_API_KEY'] = ''
+        os.environ['GROQ_API_KEY'] = ''
         at = AppTest.from_file(str(Path(__file__).with_name('FoundersAgent.py')), default_timeout=15).run()
         at.selectbox[0].select('HR & People').run()
         at.button(key='Job Posting').click().run()
@@ -108,7 +108,7 @@ class InterfaceTests(unittest.TestCase):
 
     @patch.dict(os.environ, clear=False)
     def test_research_offline_flows_and_persistence(self):
-        os.environ['DEEPSEEK_API_KEY']='offline-test-placeholder'
+        os.environ['GROQ_API_KEY']='offline-test-placeholder'
         for key in ['SERPAPI_API_KEY','TAVILY_API_KEY','EXA_API_KEY']:
             os.environ[key]=''
         for key in ['ALL_PROXY','all_proxy','HTTP_PROXY','HTTPS_PROXY','http_proxy','https_proxy']:

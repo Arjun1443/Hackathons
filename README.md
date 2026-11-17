@@ -7,10 +7,10 @@ FoundersAgent is a Python and Streamlit startup-assistance prototype that brings
 
 | Entry point | Purpose | Implementation | Report export |
 | --- | --- | --- | --- |
-| [app.py](app.py) | AI-assisted startup research with nine selectable agents | DeepSeek, LangGraph, LangChain, and optional search APIs | Plain text (`.txt`) |
+| [app.py](app.py) | AI-assisted startup research with nine selectable agents | Groq, LangGraph, LangChain, and optional search APIs | Plain text (`.txt`) |
 | [FoundersAgent.py](FoundersAgent.py) | Broader demonstration with 24 agent options across nine categories | Python rules, calculations, templates, and evidence checklists | JSON (`.json`) |
 
-**Start with `FoundersAgent.py` for a demonstration without model credentials. Use `app.py` for DeepSeek-generated responses and optional external research.**
+**Start with `FoundersAgent.py` for a demonstration without model credentials. Use `app.py` for Groq-generated responses and optional external research.**
 
 The two files have separate interfaces and execution paths. Selecting an agent runs that agent; the current implementation does not automatically coordinate all agents in a shared workflow.
 
@@ -59,7 +59,7 @@ Reports and the last 50 local traces survive reruns within the current Streamlit
 | User interface | Streamlit with custom CSS |
 | Language | Python |
 | AI workflow in `app.py` | LangGraph |
-| Model integration in `app.py` | LangChain DeepSeek integration, model ID `deepseek-chat` |
+| Model integration in `app.py` | Groq hosted inference through the OpenAI-compatible API, using LangChain `ChatOpenAI` |
 | Optional trend research | SerpAPI Google Trends |
 | Optional competitor search | Tavily |
 | Optional market validation | Exa |
@@ -109,7 +109,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-`requirements.txt` includes the Streamlit interface, DeepSeek/LangGraph dependencies, and optional research SDKs. The `google-search-results` distribution provides the `serpapi.GoogleSearch` import. API keys are still needed to use hosted services.
+`requirements.txt` includes the Streamlit interface, Groq/LangGraph dependencies, and optional research SDKs. The `google-search-results` distribution provides the `serpapi.GoogleSearch` import. API keys are still needed to use hosted services.
 
 ### 4. Choose an application
 
@@ -119,18 +119,21 @@ python -m pip install -r requirements.txt
 python -m streamlit run FoundersAgent.py
 ```
 
-**DeepSeek application**
+**Groq application**
 
 Create a file named `.env` in the repository root:
 
 ```dotenv
-DEEPSEEK_API_KEY=your_deepseek_api_key
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=openai/gpt-oss-20b
 SERPAPI_API_KEY=your_serpapi_api_key
 TAVILY_API_KEY=your_tavily_api_key
 EXA_API_KEY=your_exa_api_key
 ```
 
 Replace the placeholders with your own credentials. Optional keys can be omitted.
+
+The provider endpoint is `https://api.groq.com/openai/v1`. Only a Groq API key is required for model calls, even though the compatibility client is named `ChatOpenAI`. An OpenAI API key is not needed. Use a model available to your Groq account. See [Groq models](https://console.groq.com/docs/models) and [API compatibility](https://console.groq.com/docs/openai). Set `GROQ_API_KEY` in your local `.env` or deployment secrets, reinstall `requirements.txt`, and restart Streamlit after updating.
 
 ```bash
 python -m streamlit run app.py
@@ -142,14 +145,15 @@ Open the local URL printed by Streamlit, usually [http://localhost:8501](http://
 
 | Variable | Required for | Behavior when missing |
 | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | All of `app.py` | The application stops with a configuration message |
+| `GROQ_API_KEY` | AI requests in both applications | The research app stops without it. Job fields remain manually editable |
+| `GROQ_MODEL` | Optional model override | Defaults to `openai/gpt-oss-20b` |
 | `SERPAPI_API_KEY` | Google Trends tool in `app.py` | Returns an error indicator. Idea Evaluation refuses to produce a viability score |
 | `TAVILY_API_KEY` | Competitor search in `app.py` | Returns an empty competitor list with an error indicator. Idea Evaluation stops scoring |
 | `EXA_API_KEY` | Market validation in `app.py` | Returns an empty product list with an error indicator. Idea Evaluation stops scoring |
 
 `FoundersAgent.py` also reads `ARIZE_API_KEY` and `ARIZE_SPACE_KEY`, but its current tracker does not use them to connect to a remote service.
 
-Use your own provider accounts and check their usage limits and charges. Keep credentials out of Git commits, screenshots, and shared reports. Inputs sent through `app.py` may be transmitted to DeepSeek and the configured search providers.
+Use your own provider accounts and check their usage limits and charges. Keep credentials out of Git commits, screenshots, and shared reports. Inputs sent through `app.py` may be transmitted to Groq and the configured search providers.
 
 ## How to use
 
@@ -182,7 +186,7 @@ For Productivity Coach, enter 0.25–12 hours and separate priorities with comma
 
 In **HR & People → Job Posting**, enter a minimum and maximum salary, currency, and pay period (year, month, or hour). Draft role responsibilities, required skills and experience, and benefits with the **Draft … with AI** buttons, or enter them manually. Every field remains editable. The application email/careers URL field has been removed. Choose LinkedIn, Naukri, and/or Indeed, then execute the helper.
 
-AI drafting uses the existing `DEEPSEEK_API_KEY` from `.env` or deployment secrets and the `deepseek-chat` model. It runs only when a draft button is clicked, uses the entered job context and current text, and replaces only the chosen section. Missing credentials or request failures leave the existing text intact. Manual editing and the rest of the extended application do not require a key. Review benefits suggestions before offering them to candidates.
+AI drafting uses the existing `GROQ_API_KEY` from `.env` or deployment secrets and the `openai/gpt-oss-20b` model. It runs only when a draft button is clicked, uses the entered job context and current text, and replaces only the chosen section. Missing credentials or request failures leave the existing text intact. Manual editing and the rest of the extended application do not require a key. Review benefits suggestions before offering them to candidates.
 
 The result provides a copyable description, a text download, and buttons to open the selected platform's official employer posting page. Sign in to the employer account, paste the draft, complete any remaining fields, and publish there. These buttons do not prefill or submit forms, purchase listings, or report publication success. A salary range of zero or a minimum above the maximum is rejected.
 
@@ -214,7 +218,7 @@ Idea Evaluation reports insufficient evidence instead of scoring when a research
 
 | File | Purpose |
 | --- | --- |
-| [app.py](app.py) | Nine-agent DeepSeek application, tool definitions, workflow state, and Streamlit interface |
+| [app.py](app.py) | Nine-agent Groq application, tool definitions, workflow state, and Streamlit interface |
 | [FoundersAgent.py](FoundersAgent.py) | Independent 24-option demonstration application and local trace tracker |
 | [prompts.yaml](prompts.yaml) | Additional code-agent prompt templates; neither application currently loads this file |
 | [requirements.txt](requirements.txt) | Pinned top-level dependencies for both applications |
@@ -237,8 +241,8 @@ Verify business research against original sources and review generated financial
 
 | Problem | What to check |
 | --- | --- |
-| `ModuleNotFoundError: langgraph`, `langchain_deepseek`, or `langchain_core` | Activate the virtual environment and install `requirements.txt` |
-| Missing DeepSeek key message | Place `.env` beside `app.py`, set `DEEPSEEK_API_KEY`, and restart Streamlit |
+| `ModuleNotFoundError: langgraph`, `langchain_openai`, or `langchain_core` | Activate the virtual environment and install `requirements.txt` |
+| Missing Groq key message | Place `.env` beside `app.py`, set `GROQ_API_KEY`, and restart Streamlit |
 | Empty competitor or market results | Check the relevant optional key, SDK installation, provider quota, and returned error details |
 | Idea Evaluation reports insufficient evidence | Configure the missing research providers and retry. The application deliberately avoids scoring provider failures |
 | Provider authentication or quota error | Check account access, key validity, usage limits, and billing with that provider |

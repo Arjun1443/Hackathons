@@ -75,31 +75,55 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn('sharing/share-offsite', result['posting_options'][0]['url'])
 
     def test_ai_job_drafting_uses_context_and_marks_benefits_as_proposals(self):
-        module = ModuleType('langchain_deepseek')
+        module = ModuleType('langchain_openai')
         calls = []
+        configs = []
         class FakeClient:
             def __init__(self, **kwargs):
-                pass
+                configs.append(kwargs)
             def invoke(self, messages):
                 calls.append(json.loads(messages[-1].content))
                 return SimpleNamespace(content='- Teach Python and review practical projects')
-        module.ChatDeepSeek = FakeClient
+        module.ChatOpenAI = FakeClient
         messages = ModuleType('langchain_core.messages')
         messages.SystemMessage = messages.HumanMessage = Message
         core = ModuleType('langchain_core')
         core.messages = messages
         context = {'job_title':'AI Trainer', 'company':'AIQUBIX', 'location':'Remote', 'job_type':'Part-time'}
-        with patch.dict(os.environ, {'DEEPSEEK_API_KEY':'test-placeholder'}), patch.dict(sys.modules, {'langchain_deepseek':module,'langchain_core':core,'langchain_core.messages':messages}):
+        with patch.dict(os.environ, {'GROQ_API_KEY':'test-placeholder', 'GROQ_MODEL':'openai/gpt-oss-20b'}), patch.dict(sys.modules, {'langchain_openai':module,'langchain_core':core,'langchain_core.messages':messages}):
             for section in ('responsibilities', 'requirements', 'benefits'):
                 result = self.demo['draft_job_section'](section, context, 'Keep this draft relevant')
                 self.assertIn('Python', result)
+                self.assertEqual(configs[-1]['base_url'], 'https://api.groq.com/openai/v1')
+                self.assertEqual(configs[-1]['api_key'], 'test-placeholder')
+                self.assertEqual(configs[-1]['model'], 'openai/gpt-oss-20b')
+                self.assertEqual(configs[-1]['extra_body'], {'include_reasoning':False})
                 self.assertEqual(calls[-1]['job']['job_title'], 'AI Trainer')
                 self.assertEqual(calls[-1]['existing_draft'], 'Keep this draft relevant')
                 if section == 'benefits':
                     self.assertIn('confirm before publishing', result)
 
+    def test_research_clients_use_groq_endpoint_and_configured_model(self):
+        tree = ast.parse((ROOT / 'app.py').read_text())
+        names = {'GROQ_API_KEY', 'GROQ_MODEL', 'GROQ_OPTIONS', 'llm_pro', 'llm_flash'}
+        nodes = [n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id in names for t in n.targets)]
+        for override in ('', 'custom-groq-model'):
+            configs = []
+            def fake_client(**kwargs):
+                configs.append(kwargs)
+                return kwargs
+            with patch.dict(os.environ, {'GROQ_API_KEY':'test-placeholder', 'GROQ_MODEL':override}):
+                exec(compile(ast.Module(body=nodes, type_ignores=[]), 'app.py', 'exec'), {'os':os, 'ChatOpenAI':fake_client})
+            self.assertEqual(len(configs), 2)
+            for config in configs:
+                self.assertEqual(config['base_url'], 'https://api.groq.com/openai/v1')
+                self.assertEqual(config['model'], override or 'openai/gpt-oss-20b')
+                self.assertEqual(config['api_key'], 'test-placeholder')
+                if override:
+                    self.assertNotIn('reasoning_effort', config)
+
     def test_ai_job_drafting_rejects_missing_key_or_empty_output(self):
-        with patch.dict(os.environ, {'DEEPSEEK_API_KEY':''}), self.assertRaises(ValueError):
+        with patch.dict(os.environ, {'GROQ_API_KEY':''}), self.assertRaises(ValueError):
             self.demo['draft_job_section']('responsibilities', {'job_title':'Trainer'})
         with self.assertRaises(ValueError):
             self.demo['draft_job_section']('unknown', {'job_title':'Trainer'})

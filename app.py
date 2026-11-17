@@ -7,7 +7,7 @@ from uuid import uuid4
 from typing import TypedDict, List, Annotated
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
-from langchain_deepseek import ChatDeepSeek
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import tool
 import json
@@ -99,13 +99,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==================== CONFIGURATION ====================
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip() or "openai/gpt-oss-20b"
+GROQ_OPTIONS = {"reasoning_effort": "low", "extra_body": {"include_reasoning": False}} if GROQ_MODEL.startswith("openai/gpt-oss-") else {}
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 EXA_API_KEY = os.getenv("EXA_API_KEY")
 
-if not DEEPSEEK_API_KEY:
-    st.error("❌ Please set DEEPSEEK_API_KEY in your .env file")
+if not GROQ_API_KEY:
+    st.error("❌ Please set GROQ_API_KEY in your .env file")
     st.stop()
 
 # ==================== TOOL DEFINITIONS (Copy all your @tool functions here) ====================
@@ -598,18 +600,22 @@ def calculate_vc_valuation(revenue: float, growth_rate: float, industry_multipli
 # YOU MUST PASTE YOUR ACTUAL TOOL FUNCTIONS HERE.
 
 # ==================== LLM INITIALIZATION ====================
-llm_pro = ChatDeepSeek(
-    model="deepseek-chat",
-    api_key=DEEPSEEK_API_KEY,
+llm_pro = ChatOpenAI(
+    model=GROQ_MODEL,
+    base_url="https://api.groq.com/openai/v1",
+    **GROQ_OPTIONS,
+    api_key=GROQ_API_KEY,
     temperature=0.3,
     timeout=60,
     max_retries=2,
     max_tokens=4096
 )
 
-llm_flash = ChatDeepSeek(
-    model="deepseek-chat",
-    api_key=DEEPSEEK_API_KEY,
+llm_flash = ChatOpenAI(
+    model=GROQ_MODEL,
+    base_url="https://api.groq.com/openai/v1",
+    **GROQ_OPTIONS,
+    api_key=GROQ_API_KEY,
     temperature=0.9,
     timeout=60,
     max_retries=2,
@@ -1090,7 +1096,7 @@ with st.sidebar:
     st.markdown("### 🚀 FoundersAgent")
     st.markdown("---")
     st.markdown("#### 🔧 API Status")
-    st.markdown(f"DeepSeek: {'✅' if DEEPSEEK_API_KEY else '❌'}")
+    st.markdown(f"Groq: {'✅' if GROQ_API_KEY else '❌'}")
     st.markdown(f"SerpAPI: {'✅' if SERPAPI_API_KEY else '❌'}")
     st.markdown(f"Tavily: {'✅' if TAVILY_API_KEY else '❌'}")
     st.markdown(f"Exa AI: {'✅' if EXA_API_KEY else '❌'}")
@@ -1255,4 +1261,4 @@ if st.session_state.get("research_report_agent") == selected_agent:
         st.download_button("Download report", report_text, "foundersagent_report.txt", mime="text/plain")
 
 st.markdown("---")
-st.caption("FoundersAgent - Your AI Co-Founder in a Box | Powered by deepseek-chat")
+st.caption(f"FoundersAgent - Your AI Co-Founder in a Box | Groq model: {GROQ_MODEL}")

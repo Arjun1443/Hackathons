@@ -644,18 +644,20 @@ class InvoiceAgent:
 
 # ---------- CATEGORY 4: HR & PEOPLE AGENTS ----------
 def draft_job_section(section, context, current_text=""):
-    """Draft one editable section on demand using the configured DeepSeek key."""
+    """Draft one editable section on demand using the configured Groq key."""
     labels = {"responsibilities": "Role responsibilities", "requirements": "Required skills and experience", "benefits": "Benefits offered"}
     if section not in labels:
         raise ValueError("Choose a supported job-description section.")
     if not str(context.get("job_title", "")).strip():
         raise ValueError("Enter a job title before generating a draft.")
-    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
-        raise ValueError("AI drafting needs DEEPSEEK_API_KEY in your local .env or deployment secrets. You can still type and edit these fields manually.")
-    from langchain_deepseek import ChatDeepSeek
+        raise ValueError("AI drafting needs GROQ_API_KEY in your local .env or deployment secrets. You can still type and edit these fields manually.")
+    from langchain_openai import ChatOpenAI
     from langchain_core.messages import SystemMessage, HumanMessage
-    client = ChatDeepSeek(model="deepseek-chat", api_key=api_key, temperature=0.5, max_tokens=700, timeout=30, max_retries=1)
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip() or "openai/gpt-oss-20b"
+    options = {"reasoning_effort": "low", "extra_body": {"include_reasoning": False}} if model.startswith("openai/gpt-oss-") else {}
+    client = ChatOpenAI(model=model, base_url="https://api.groq.com/openai/v1", api_key=api_key, temperature=0.5, max_tokens=2000, timeout=30, max_retries=1, **options)
     prompt = (
         "Draft only the requested section of a job description in clear, natural English. "
         "Use 4–6 concise bullet points that suit the job title, seniority if supplied, location, and employment type. "
@@ -1498,7 +1500,7 @@ if selected_agent:
                 except ValueError as exc:
                     st.warning(str(exc))
                 except Exception:
-                    st.error("AI drafting could not complete. Check the DeepSeek key, quota, and connection, then retry. Your existing text was kept.")
+                    st.error("AI drafting could not complete. Check the Groq key, quota, and connection, then retry. Your existing text was kept.")
             inputs[field] = st.text_area(label, key=field_key, height=160)
         inputs["posting_platforms"] = st.multiselect("Posting platforms", list(JobPostingAgent.PLATFORMS), default=list(JobPostingAgent.PLATFORMS))
         st.caption("Buttons open each platform's employer posting page. Sign in, paste the draft, and publish there. The app does not automatically fill or submit their forms.")
