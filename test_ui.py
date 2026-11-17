@@ -40,7 +40,7 @@ class InterfaceTests(unittest.TestCase):
                     result = at.session_state['agent_results'][name]
                     assert result['salary']['minimum'] == 60000
                     assert 'per month' in result['description']
-                    assert len(at.get('link_button')) == 3
+                    assert len([x for x in at.markdown if 'class="job-posting-icon"' in x.value]) == 3
                     assert any(x.label == 'Download job description' for x in at.get('download_button'))
                 at.run()
                 assert any(x.value == '### Result' for x in at.markdown), (name,'Result disappeared on rerun')
@@ -56,6 +56,40 @@ class InterfaceTests(unittest.TestCase):
         assert at.warning and 'Payslip' not in at.session_state['agent_results']
         assert not at.exception
         print('PASS: invalid payroll gives a warning and clears the stale result')
+
+    def test_job_platform_logos_open_official_pages_in_new_tabs(self):
+        from html.parser import HTMLParser
+        class Links(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links = []
+                self.images = []
+            def handle_starttag(self, tag, attrs):
+                if tag == 'a':
+                    self.links.append(dict(attrs))
+                if tag == 'img':
+                    self.images.append(dict(attrs))
+        at = AppTest.from_file(str(Path(__file__).with_name('FoundersAgent.py')), default_timeout=15).run()
+        at.selectbox[0].select('HR & People').run()
+        at.button(key='Job Posting').click().run()
+        next(x for x in at.button if x.label.startswith('🚀 Execute')).click().run()
+        assert not at.exception
+        elements = [x for x in at.markdown if 'class="job-posting-icon"' in x.value]
+        assert len(elements) == 3
+        urls = {'LinkedIn':'https://www.linkedin.com/talent/post-a-job', 'Naukri':'https://www.naukri.com/recruit/job-posting', 'Indeed':'https://in.indeed.com/hire/post-job'}
+        for element in elements:
+            parser = Links()
+            parser.feed(element.value)
+            assert len(parser.links) == len(parser.images) == 1
+            link, image = parser.links[0], parser.images[0]
+            platform = link['data-job-platform']
+            assert link['href'] == urls[platform]
+            assert link['target'] == '_blank'
+            assert 'noopener' in link['rel'] and 'noreferrer' in link['rel']
+            assert image['alt'] == platform + ' logo'
+            assert image['src'].startswith('data:image/png;base64,')
+        at.run()
+        assert len([x for x in at.markdown if 'class="job-posting-icon"' in x.value]) == 3
 
     @patch.dict(os.environ, clear=False)
     def test_ai_job_sections_remain_editable_and_application_field_is_removed(self):

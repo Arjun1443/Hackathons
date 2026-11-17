@@ -685,6 +685,9 @@ class JobPostingAgent:
         "Indeed": "https://in.indeed.com/hire/post-job",
     }
 
+    # Official site favicons, retrieved 2026-11-17 from each platform's /favicon.ico.
+    LOGOS = {'LinkedIn': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAADCUlEQVR4nO2bO0zbUBSGf1dFIh0IqRkoDKG1RAeQYtYMYBa2CDYYWenkIXuSoVuGTGUk3RiLsiEkLFXKQiVcqQyt5EoRarpgBWcJUgZ3aaLg2MHXODnx45vi+7DP/XyfkcyZpoko84I6AGpiAdQBUPPSKYPL14oAZADJSQUzJgwAFQAVs5y7t2YOCeDytXkACoDMeOOaGEkABQB7AERrpt0QkBGexg+S+d+rH+EkIKzI1gQ7AUEf86MYalu8CnitKAk8JGEBAKBod1A03begJgmzAEngUT3YQDqV6KcVsIpGq4PD0+vAiWAaApLA4/Io+6jxPdKpBC6PspAE3rfgJgGTgOrBhi9lpgnXAiSBt33zVtKpRKB6AYOABdc3ZSlLTeSXQdcCFO3O9U1ZylLDIEBHo9V5slyj1QnUUsg0BA5Pr30pM00wCVA0HdvHddue0Gh1sH1cD9TbBzzsBBVNx8rHi+huhXsomh7YRg/iWcC46W2mJGEBatPAfacLAFCb7f5vP2AWYJZzI/O5fM11+dL5LxTPf/avJYGHvPkOu2uLI5/RaHVQvbpF5evvZ8uYih6w8voVqvsitlxuodOpBAo7q5A330I+u0H16tbzs8kFiEtzUD5kkZydYa6bnJ3Byb4IAJ4lkG6FxWXvjR/kZF/0fAAjFbC7tvjsxvco7rz3VC80h6EtgYe4NMdcLzQCAGBv/Q1zHfJJ0Irx0IX6p92/nk/MIOPyzXqZB6ZGgPHQdVzSJIFHZXf9SRHickCHgPHQhfSp7riUKZru6pTpZUKdCgHy2Q3UZntkGbXZxudv3jc8TpAL6G1r3TA4N/gFuYAvP/66Lqs2Dd+fTy6A+khNLsDPo60XyAWwMI7eQi4g8kOAmlgAdQDUxAKoA6AmFkAdADWxAOoAqIkFUAdADWf9ZojL10L9EZFZznGD15HvAbEA6gCosRPg/x9v08NQ2+wEVMYfBxkVa8LQKgAAXL6mInzfDX03yznRmug0B0gASgjHcDAAlOwaDzj0gCgRrwLUAVATeQH/ACJz5OtPcJf3AAAAAElFTkSuQmCC', 'Naukri': 'data:image/png;base64,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', 'Indeed': 'data:image/png;base64,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'}
+
     @staticmethod
     def execute(inputs):
         title = required_text(inputs, "job_title")
@@ -734,6 +737,25 @@ Benefits
             "output_mode": "Job draft only. Copy the description and open a platform to finish posting in your employer account.",
             "next_action": "Review the draft, copy it, and publish on the selected platform. Direct publishing is not connected."
         })
+
+
+def job_posting_logo_html(platform):
+    """Accessible logo link to a known employer page, always in a new tab."""
+    if platform not in JobPostingAgent.PLATFORMS:
+        raise ValueError("Unsupported posting platform.")
+    url = html.escape(JobPostingAgent.PLATFORMS[platform], quote=True)
+    name = html.escape(platform, quote=True)
+    logo = JobPostingAgent.LOGOS[platform]
+    return (
+        f'<a class="job-posting-icon" data-job-platform="{name}" '
+        f'href="{url}" target="_blank" rel="noopener noreferrer" '
+        f'aria-label="Create a job on {name} (opens in a new tab)" '
+        'style="display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        'gap:12px;min-height:140px;padding:20px;border:1px solid #CBD5E1;'
+        'border-radius:12px;background:#FFFFFF;color:#082E60;text-decoration:none;font-weight:600;">'
+        f'<img src="{logo}" alt="{name} logo" width="64" height="64" style="object-fit:contain;">'
+        f'<span>{name}</span></a>'
+    )
 
 
 class ResumeScreeningAgent:
@@ -1617,9 +1639,13 @@ if selected_agent:
             st.code(result["description"], language=None, wrap_lines=True)
             st.download_button("Download job description", result["description"], "job_description.txt", mime="text/plain", key="download_job_description")
             st.markdown("#### Create a job posting")
-            for option in result.get("posting_options", []):
-                st.link_button(f"Open {option['platform']} job posting", option["url"])
-            st.caption("Status: draft only. Opening a platform does not publish the job. No posting API integration is connected.")
+            posting_options = result.get("posting_options", [])
+            if posting_options:
+                portal_columns = st.columns(len(posting_options))
+                for column, option in zip(portal_columns, posting_options):
+                    with column:
+                        st.markdown(job_posting_logo_html(option["platform"]), unsafe_allow_html=True)
+            st.caption("Click a logo to open that platform in a new tab. Sign in, paste your copied job description, complete the remaining fields, and publish there. Opening a page does not publish the draft.")
         for key, value in result.items():
             if key in ("output_mode", "arize_traces") or selected_agent == "Job Posting" and key in ("description", "posting_options"):
                 continue
