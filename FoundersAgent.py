@@ -8,6 +8,10 @@ import os
 import json
 import urllib.parse
 import random
+import re
+import math
+import html
+from uuid import uuid4
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
@@ -115,6 +119,7 @@ class ArizeTracker:
         
     def start_trace(self, agent_name: str, action: str, input_data: dict):
         self.current_trace_id = f"{agent_name}_{action}_{datetime.now().timestamp()}"
+        self.traces = self.traces[-49:]
         self.traces.append({
             "trace_id": self.current_trace_id,
             "name": f"{agent_name}.{action}",
@@ -152,7 +157,31 @@ class ArizeTracker:
     def get_traces(self):
         return self.traces
 
-arize = ArizeTracker()
+if "agent_tracker" not in st.session_state:
+    st.session_state["agent_tracker"] = ArizeTracker()
+arize = st.session_state["agent_tracker"]
+
+
+def required_text(inputs, key):
+    value = str(inputs.get(key, "")).strip()
+    if not value:
+        raise ValueError(f"Please enter {key.replace('_', ' ')}.")
+    return value
+
+
+def nonnegative(inputs, key, default=0):
+    value = float(inputs.get(key, default))
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{key.replace('_', ' ')} must be a finite, non-negative number.")
+    return value
+
+
+def traced_result(name, inputs, result):
+    result.setdefault("output_mode", "Uses your inputs. Review the status, method, and assumptions below.")
+    arize.start_trace(name, "execute", inputs)
+    arize.end_trace(result.copy())
+    return result
+
 
 # ==================== AGENT DEFINITIONS ====================
 
@@ -226,98 +255,27 @@ class IdeaGeneratorAgent:
 
 
 class IdeaScoringAgent:
-    """📊 Scores startup ideas with TAM/SAM/SOM, competition analysis"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("IdeaScoring", "score", inputs)
-        
-        idea_name = inputs.get("idea_name", "")
-        industry = inputs.get("industry", "tech")
-        
-        # Calculate scores
-        trend_score = random.randint(60, 90)
-        competition_score = random.randint(40, 85)
-        validation_score = random.randint(50, 85)
-        innovation_score = random.randint(65, 95)
-        scalability_score = random.randint(50, 90)
-        virality_score = random.randint(30, 80)
-        exit_score = random.randint(40, 85)
-        
-        # Weighted final score
-        final_score = (trend_score * 0.20 + competition_score * 0.15 + 
-                       validation_score * 0.15 + innovation_score * 0.20 +
-                       scalability_score * 0.10 + virality_score * 0.10 + 
-                       exit_score * 0.10)
-        
-        # Market size estimation
-        tam = f"${random.randint(1, 500)}B"
-        sam = f"${random.randint(1, 150)}B"
-        som = f"${random.randint(1, 50)}M"
-        
-        if final_score >= 75:
-            verdict = "🚀 HIGH POTENTIAL - Proceed immediately!"
-            action_plan = ["✅ Build MVP in 4-6 weeks", "💰 Start investor conversations", "📝 File provisional patent"]
-        elif final_score >= 55:
-            verdict = "📊 MEDIUM POTENTIAL - Validate further"
-            action_plan = ["📞 Conduct 20 customer interviews", "🔄 Refine value proposition", "🌐 Build landing page"]
-        else:
-            verdict = "⚠️ LOW POTENTIAL - Consider pivoting"
-            action_plan = ["🔍 Analyze market gaps deeply", "🎯 Explore adjacent markets", "📚 Study successful competitors"]
-        
-        arize.log_metric("final_score", final_score)
-        arize.validate_output("viability_score", final_score, 50)
-        arize.end_trace({"score": final_score, "verdict": verdict})
-        
-        return {
-            "score": round(final_score, 1),
-            "verdict": verdict,
-            "tam": tam, "sam": sam, "som": som,
-            "breakdown": {
-                "Market Trend": trend_score,
-                "Competition": competition_score,
-                "Validation": validation_score,
-                "Innovation": innovation_score,
-                "Scalability": scalability_score,
-                "Virality": virality_score,
-                "Exit Potential": exit_score
-            },
-            "action_plan": action_plan,
-            "competition_density": "Low" if competition_score > 70 else "Medium" if competition_score > 50 else "High",
-            "founder_market_fit": "Strong" if final_score > 70 else "Good" if final_score > 50 else "Needs Work",
-            "next_action": action_plan[0]
-        }
+    def execute(inputs):
+        idea = required_text(inputs, "idea_name")
+        return traced_result("IdeaScoring", inputs, {
+            "idea": idea, "score": None, "status": "insufficient_evidence",
+            "explanation": "A name and industry do not establish viability. No random score or market-size estimate is generated.",
+            "validation_checklist": ["Document the target customer's problem", "Collect customer interview evidence", "Identify competitors and cite sources", "Test willingness to pay"],
+            "next_action": "Use the research application and collect evidence before scoring."
+        })
 
 
 class ProblemValidationAgent:
-    """🔍 Validates problems by searching Reddit, Quora, Twitter"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("ProblemValidation", "validate", inputs)
-        
-        problem = inputs.get("problem", "")
-        
-        # Simulated pain points from Reddit/Quora
-        pain_points = [
-            f"Users on Reddit complain about '{problem}' being too expensive",
-            f"Quora discussions show 70% struggle with finding reliable solutions for {problem}",
-            f"Twitter sentiment: Negative sentiment around existing {problem} solutions",
-            "Recurring complaint: Poor customer support from current providers",
-            "Multiple threads asking for better alternatives in this space"
-        ]
-        
-        willingness_to_pay = random.randint(60, 95)
-        
-        arize.log_metric("willingness_to_pay", willingness_to_pay)
-        arize.end_trace({"pain_points": pain_points})
-        
-        return {
-            "pain_points": pain_points[:4],
-            "willingness_to_pay": f"{willingness_to_pay}%",
-            "validation_score": "High" if willingness_to_pay > 75 else "Medium",
-            "next_action": "Create solution hypothesis and test with landing page"
-        }
+    def execute(inputs):
+        problem = required_text(inputs, "problem")
+        return traced_result("ProblemValidation", inputs, {
+            "problem": problem, "status": "validation_plan",
+            "evidence_status": "No customer interviews or social searches have been performed.",
+            "interview_questions": [f"When did you last experience: {problem}?", "How do you handle it today?", "What time or money did it cost?", "Have you paid for an alternative?"],
+            "next_action": "Record real responses before assessing demand or willingness to pay."
+        })
 
 
 class BusinessModelAgent:
@@ -366,12 +324,8 @@ class BusinessModelAgent:
             "Revenue Streams": model["revenue"]
         }
         
-        revenue_forecast = {
-            "Year 1": "$100K - $500K",
-            "Year 2": "$500K - $2M",
-            "Year 3": "$2M - $10M"
-        }
-        
+        revenue_forecast = {"status": "Requires your customer, price, conversion, and cost assumptions"}
+
         arize.log_metric("model_type", 1)
         arize.end_trace({"model": model})
         
@@ -387,36 +341,18 @@ class BusinessModelAgent:
 
 # ---------- CATEGORY 2: LEGAL & REGISTRATION AGENTS ----------
 class DomainPurchaseAgent:
-    """🌐 Checks domain availability and generates purchase links"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("DomainPurchase", "check", inputs)
-        
-        idea = inputs.get("idea", "startup")
-        base_name = idea.lower().replace(" ", "").replace("-", "")[:15]
-        
-        domains = [
-            {"domain": f"{base_name}.com", "price": "$12.99", "available": True},
-            {"domain": f"{base_name}.ai", "price": "$24.99", "available": True},
-            {"domain": f"{base_name}.io", "price": "$29.99", "available": True},
-            {"domain": f"get{base_name}.com", "price": "$12.99", "available": True},
-            {"domain": f"try{base_name}.io", "price": "$19.99", "available": True},
-            {"domain": f"{base_name}hq.com", "price": "$12.99", "available": random.choice([True, False])}
-        ]
-        
-        available = [d for d in domains if d["available"]]
-        
-        arize.log_metric("domains_found", len(available))
-        arize.validate_output("domains_available", len(available), 1)
-        arize.end_trace({"available": available})
-        
-        return {
-            "available_domains": available[:5],
-            "recommended": available[0]["domain"] if available else None,
-            "purchase_links": [f"https://www.godaddy.com/domainsearch/find?domainToCheck={d['domain']}" for d in available[:3]],
-            "next_action": "Purchase domain immediately"
-        }
+    def execute(inputs):
+        name = required_text(inputs, "idea")
+        base = re.sub(r"[^a-z0-9-]", "", name.lower()).strip("-")[:50]
+        if not base:
+            raise ValueError("Enter a name containing Latin letters or numbers.")
+        domains = [base + suffix for suffix in (".com", ".in", ".ai", ".io")]
+        return traced_result("DomainSuggestions", inputs, {
+            "suggested_domains": domains, "availability": "not_checked",
+            "purchase_links": ["https://www.godaddy.com/domainsearch/find?domainToCheck=" + urllib.parse.quote(d) for d in domains],
+            "next_action": "Check availability and current pricing with a registrar. No purchase has occurred."
+        })
 
 
 class CompanyRegistrationAgent:
@@ -597,133 +533,50 @@ This Agreement is made between {company_name} ("Disclosing Party") and the Recip
 
 
 class TrademarkAgent:
-    """® Trademark search and registration guidance"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("Trademark", "search", inputs)
-        
-        brand_name = inputs.get("brand_name", "")
-        
-        # Simulated trademark search results
-        similar_brands = [
-            {"name": f"{brand_name}Pro", "risk": "High", "class": "9, 42"},
-            {"name": f"{brand_name}Tech", "risk": "Medium", "class": "9"},
-            {"name": f"{brand_name}Solutions", "risk": "Low", "class": "35"}
-        ] if brand_name else []
-        
-        risk_score = random.randint(20, 80) if brand_name else 0
-        
-        arize.log_metric("risk_score", risk_score)
-        arize.end_trace({"risk": risk_score})
-        
-        return {
-            "brand_name": brand_name,
-            "similar_brands": similar_brands,
-            "risk_score": risk_score,
-            "risk_level": "High" if risk_score > 60 else "Medium" if risk_score > 30 else "Low",
-            "registration_steps": [
-                "Conduct comprehensive trademark search",
-                "Identify appropriate trademark class",
-                "File application with USPTO/IPO",
-                "Respond to office actions",
-                "Maintain registration with renewals"
-            ],
-            "estimated_cost": "$225-400 per class",
-            "timeframe": "6-12 months",
-            "next_action": "Conduct comprehensive search before filing"
-        }
+    def execute(inputs):
+        brand = required_text(inputs, "brand_name")
+        return traced_result("Trademark", inputs, {
+            "brand_name": brand, "risk_score": None, "status": "not_searched",
+            "search_checklist": ["Select the country and relevant goods/services classes", "Search the official trademark registry", "Check similar spellings and pronunciations", "Review conflicts with a trademark professional"],
+            "next_action": "Complete an official registry search. No clearance or risk result is available."
+        })
 
 # ---------- CATEGORY 3: FINANCE & ACCOUNTING AGENTS ----------
 class TaxFilingAgent:
-    """💸 Calculates tax liability and provides deadlines"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("TaxFiling", "calculate", inputs)
-        
-        revenue = inputs.get("revenue", 0)
-        expenses = inputs.get("expenses", 0)
-        country = inputs.get("country", "India")
-        
-        tax_rates = {"India": 0.25, "USA": 0.21, "UK": 0.19, "Singapore": 0.17}
-        rate = tax_rates.get(country, 0.25)
-        
-        taxable_income = max(0, revenue - expenses)
-        tax_due = taxable_income * rate
-        
-        deductions = [
-            "Business expenses: ₹{:.0f}".format(expenses) if country == "India" else f"${expenses:,.0f}",
-            "Home office deduction: ₹24,000" if country == "India" else "$1,500",
-            "Equipment depreciation: ₹15,000" if country == "India" else "$1,000"
-        ]
-        
-        deadlines = {
-            "India": "March 31, 2026",
-            "USA": "April 15, 2026", 
-            "UK": "January 31, 2026",
-            "Singapore": "November 30, 2026"
-        }
-        
-        arize.log_metric("tax_due", tax_due)
-        arize.validate_output("taxable_income", taxable_income, 0)
-        arize.end_trace({"tax_due": tax_due})
-        
-        return {
-            "tax_due": round(tax_due, 2),
-            "taxable_income": round(taxable_income, 2),
-            "effective_rate": rate * 100,
-            "filing_deadline": deadlines.get(country, "Check local authority"),
-            "deductions": deductions,
-            "forms_required": ["Income Tax Return", "GST Return" if country == "India" else "Corporate Tax Return"],
-            "next_action": f"File tax return by {deadlines.get(country, 'deadline')}"
-        }
+    def execute(inputs):
+        revenue = nonnegative(inputs, "revenue")
+        expenses = nonnegative(inputs, "expenses")
+        rate = nonnegative(inputs, "tax_rate")
+        if rate > 100:
+            raise ValueError("Tax rate must be between 0 and 100 percent.")
+        return traced_result("TaxEstimate", inputs, {
+            "country": required_text(inputs, "country"), "currency": "USD (input units)",
+            "taxable_income": max(0, revenue - expenses),
+            "tax_due": round(max(0, revenue - expenses) * rate / 100, 2),
+            "assumed_rate_percent": rate, "status": "illustrative_estimate",
+            "assumptions": "Uses the rate you entered. Excludes jurisdiction-specific adjustments, reliefs, and filing rules.",
+            "next_action": "Verify the applicable rate and filing deadline with a qualified adviser. No return has been filed."
+        })
 
 
 class CFOAgent:
-    """💰 Burn rate analysis, runway prediction, cash flow forecasting"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("CFO", "analyze", inputs)
-        
-        monthly_burn = inputs.get("monthly_burn", 50000)
-        cash_balance = inputs.get("cash_balance", 500000)
-        monthly_revenue = inputs.get("monthly_revenue", 10000)
-        
-        runway_months = cash_balance / monthly_burn if monthly_burn > 0 else 0
-        
-        # Cash flow forecast for next 6 months
-        forecast = []
-        current_cash = cash_balance
-        for month in range(1, 7):
-            current_cash = current_cash - monthly_burn + monthly_revenue
-            forecast.append({
-                "month": month,
-                "cash_balance": round(current_cash, 0),
-                "burn": monthly_burn,
-                "revenue": monthly_revenue
-            })
-        
-        survival_probability = min(100, (runway_months / 12) * 100)
-        
-        arize.log_metric("runway_months", runway_months)
-        arize.validate_output("survival_probability", survival_probability, 30)
-        arize.end_trace({"runway": runway_months})
-        
-        return {
-            "monthly_burn": monthly_burn,
-            "cash_balance": cash_balance,
-            "runway_months": round(runway_months, 1),
-            "survival_probability": round(survival_probability, 1),
-            "cash_flow_forecast": forecast,
-            "recommendations": [
-                "Reduce non-essential expenses" if monthly_burn > cash_balance * 0.1 else "Current burn rate is healthy",
-                "Focus on revenue growth to extend runway",
-                "Consider raising funds in next 3-6 months" if runway_months < 6 else "Sufficient runway for now"
-            ],
-            "next_action": "Review forecast monthly and adjust spending"
-        }
+    def execute(inputs):
+        expenses = nonnegative(inputs, "monthly_burn")
+        cash = nonnegative(inputs, "cash_balance")
+        revenue = nonnegative(inputs, "monthly_revenue")
+        net_burn = expenses - revenue
+        runway = round(cash / net_burn, 2) if net_burn > 0 else None
+        return traced_result("CFO", inputs, {
+            "monthly_expenses": expenses, "monthly_revenue": revenue, "cash_balance": cash,
+            "net_monthly_burn": net_burn, "runway_months": runway,
+            "runway_status": "Cash depletes at the assumed net burn" if runway is not None else "No cash depletion under constant inputs",
+            "cash_flow_forecast": [{"month": m, "cash_balance": round(cash - net_burn*m, 2)} for m in range(1, 7)],
+            "assumptions": "Constant revenue and expenses. Negative cash indicates an unmet funding need. No survival probability is estimated.",
+            "next_action": "Review expenses and revenue assumptions monthly."
+        })
 
 
 class InvoiceAgent:
@@ -737,7 +590,7 @@ class InvoiceAgent:
         amount = inputs.get("amount", 5000)
         description = inputs.get("description", "Professional Services")
         
-        invoice_number = f"INV-{datetime.now().strftime('%Y%m')}-{random.randint(100, 999)}"
+        invoice_number = f"INV-{uuid4().hex[:12]}"
         
         due_date = (datetime.now() + timedelta(days=15)).strftime("%B %d, %Y")
         
@@ -756,14 +609,14 @@ class InvoiceAgent:
                 </div>
             </div>
             <hr>
-            <p><strong>Bill To:</strong><br>{client_name}</p>
+            <p><strong>Bill To:</strong><br>{html.escape(client_name)}</p>
             <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
                 <tr style="background: #1e293b;">
                     <th style="padding: 10px; text-align: left;">Description</th>
                     <th style="padding: 10px; text-align: right;">Amount</th>
                 </tr>
                 <tr>
-                    <td style="padding: 10px;">{description}</td>
+                    <td style="padding: 10px;">{html.escape(description)}</td>
                     <td style="padding: 10px; text-align: right;">${amount:,.2f}</td>
                  </tr>
                 <tr style="background: #1e293b;">
@@ -827,7 +680,7 @@ Benefits:
 • Health insurance
 • Learning budget
 
-Apply: careers@{company.lower().replace(' ', '')}.com"""
+Apply: [Enter your application email]"""
         
         linkedin_url = f"https://www.linkedin.com/sharing/share-offsite/?text={urllib.parse.quote(description[:1000])}"
         
@@ -839,93 +692,45 @@ Apply: careers@{company.lower().replace(' ', '')}.com"""
             "description": description,
             "linkedin_url": linkedin_url,
             "naukri_url": "https://www.naukri.com/recruiters/login",
-            "application_email": f"careers@{company.lower().replace(' ', '')}.com",
+            "application_email": "[Enter your application email]",
             "next_action": "Post to job boards and start screening candidates"
         }
 
 
 class ResumeScreeningAgent:
-    """🤖 Screens resumes and ranks candidates"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("ResumeScreening", "screen", inputs)
-        
-        job_requirements = inputs.get("job_requirements", "")
-        
-        # Simulated candidates
-        candidates = [
-            {"name": "Alice Johnson", "score": 92, "skills": ["Python", "React", "AWS"], "experience": "5 years"},
-            {"name": "Bob Smith", "score": 78, "skills": ["Java", "Spring", "Docker"], "experience": "4 years"},
-            {"name": "Carol Davis", "score": 85, "skills": ["Python", "Django", "PostgreSQL"], "experience": "3 years"},
-            {"name": "David Lee", "score": 65, "skills": ["JavaScript", "HTML", "CSS"], "experience": "2 years"},
-            {"name": "Emma Wilson", "score": 88, "skills": ["React", "Node.js", "MongoDB"], "experience": "4 years"}
-        ]
-        
-        ranked = sorted(candidates, key=lambda x: x["score"], reverse=True)
-        
-        arize.log_metric("candidates_screened", len(candidates))
-        arize.end_trace({"top_score": ranked[0]["score"] if ranked else 0})
-        
-        return {
-            "candidates": ranked,
-            "top_candidate": ranked[0] if ranked else None,
-            "ats_score_threshold": 70,
-            "shortlisted": [c for c in ranked if c["score"] >= 70],
-            "next_action": "Interview top 3 candidates"
-        }
+    def execute(inputs):
+        skills = list(dict.fromkeys(x.strip().casefold() for x in re.split(r"[,\n]+", required_text(inputs, "job_requirements")) if x.strip()))
+        resumes = required_text(inputs, "resumes")
+        candidates = []
+        for block in re.split(r"\n\s*---\s*\n", resumes):
+            lines = block.strip().splitlines()
+            if not lines:
+                continue
+            name = lines[0].strip()
+            text = "\n".join(lines[1:]).casefold()
+            if not text.strip():
+                raise ValueError(f"Please enter resume text below the name for {name}.")
+            matched = [skill for skill in skills if re.search(r"(?<!\w)" + re.escape(skill) + r"(?!\w)", text)]
+            candidates.append({"name": name, "score": round(100 * len(matched) / len(skills), 1), "matched_skills": matched, "missing_skills": [x for x in skills if x not in matched]})
+        candidates.sort(key=lambda c: c["score"], reverse=True)
+        return traced_result("ResumeScreening", inputs, {
+            "candidates": candidates, "method": "Literal required-skill coverage in pasted text. This does not assess experience, proficiency, or suitability.",
+            "next_action": "Review each resume and verify the claimed skills before making hiring decisions."
+        })
 
 
 class PayslipAgent:
-    """📄 Generates employee payslip"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("Payslip", "generate", inputs)
-        
-        employee_name = inputs.get("employee_name", "John Doe")
-        salary = inputs.get("salary", 50000)
-        month = inputs.get("month", datetime.now().strftime("%B %Y"))
-        
-        hra = salary * 0.4
-        pf = salary * 0.12
-        prof_tax = 200
-        gross = salary + hra
-        deductions = pf + prof_tax
-        net_pay = gross - deductions
-        
-        payslip_html = f"""
-        <div style="border: 2px solid #7C3AED; padding: 20px; border-radius: 10px; background: #0f172a;">
-            <h2 style="color: #7C3AED; text-align: center;">PAYSLIP</h2>
-            <p><strong>Employee:</strong> {employee_name}</p>
-            <p><strong>Month:</strong> {month}</p>
-            <hr>
-            <p><strong>Earnings:</strong></p>
-            <p>Basic Salary: ₹{salary:,.2f}</p>
-            <p>HRA: ₹{hra:,.2f}</p>
-            <p><strong>Gross Salary:</strong> ₹{gross:,.2f}</p>
-            <hr>
-            <p><strong>Deductions:</strong></p>
-            <p>Provident Fund: ₹{pf:,.2f}</p>
-            <p>Professional Tax: ₹{prof_tax:,.2f}</p>
-            <hr>
-            <p><strong style="color: #7C3AED;">Net Pay: ₹{net_pay:,.2f}</strong></p>
-        </div>
-        """
-        
-        arize.log_metric("net_pay", net_pay)
-        arize.end_trace({"employee": employee_name})
-        
-        return {
-            "employee_name": employee_name,
-            "month": month,
-            "gross": gross,
-            "deductions": deductions,
-            "net_pay": net_pay,
-            "payslip_html": payslip_html,
-            "email_template": f"Dear {employee_name},\n\nPlease find your payslip for {month} attached.\n\nBest regards,\nHR Team",
-            "next_action": "Send payslip to employee"
-        }
+    def execute(inputs):
+        name = required_text(inputs, "employee_name")
+        salary = nonnegative(inputs, "salary")
+        deductions = nonnegative(inputs, "deductions")
+        if deductions > salary:
+            raise ValueError("Deductions cannot exceed gross salary.")
+        month = inputs.get("month") or datetime.now().strftime("%B %Y")
+        preview = f"<div style='color:#122940;background:white;padding:20px'><h2>Payslip draft</h2><p>Employee: {html.escape(name)}</p><p>Month: {html.escape(str(month))}</p><p>Gross: INR {salary:,.2f}</p><p>Deductions: INR {deductions:,.2f}</p><p>Net: INR {salary-deductions:,.2f}</p></div>"
+        return traced_result("Payslip", inputs, {"employee_name": name, "month": month, "gross": salary, "deductions": deductions, "net_pay": salary-deductions, "currency": "INR", "payslip_html": preview, "assumptions": "Gross salary and total deductions come from your inputs. No statutory rates are inferred.", "next_action": "Review the draft against payroll records."})
 
 
 class EmployeeOnboardingAgent:
@@ -993,9 +798,9 @@ class CRMAgent:
         arize.start_trace("CRM", "add_lead", inputs)
         
         lead_name = inputs.get("lead_name", "New Lead")
-        lead_score = inputs.get("lead_score", random.randint(30, 95))
+        lead_score = inputs.get("lead_score", 0)
         
-        lead_id = f"LEAD_{datetime.now().strftime('%Y%m%d')}_{random.randint(100, 999)}"
+        lead_id = f"LEAD_{uuid4().hex[:12]}"
         
         follow_ups = [
             {"day": 1, "action": "Send welcome email", "status": "pending"},
@@ -1011,6 +816,8 @@ class CRMAgent:
         arize.end_trace({"lead_id": lead_id})
         
         return {
+            "output_mode": "Local lead draft only. No remote CRM write or email has occurred.",
+            "status": "draft_only",
             "lead_id": lead_id,
             "lead_name": lead_name,
             "score": lead_score,
@@ -1121,21 +928,22 @@ The biggest trend in {topic} this week...
 • Tip 3: Measure everything
 
 ## Resource of the Week
-Check out our free startup toolkit: resources.yourcompany.com
+Check out our free startup toolkit: [Add a verified resource URL]
 
 ---
 Subscribe for more insights!"""
         
-        arize.log_metric("content_generated", 1)
-        arize.end_trace({})
-        
-        return {
-            "topic": topic,
-            "blog_post": blog_post,
-            "newsletter": newsletter,
-            "seo_keywords": [f"{topic} tips", f"best {topic}", f"{topic} for startups"],
-            "next_action": "Publish to blog and share on social media"
-        }
+        if content_type == "Case Study":
+            content = f"# Case study outline: {topic}\n\n## Customer and context\n[Enter real customer details with permission.]\n\n## Problem\n[Describe the measured problem.]\n\n## Approach\n[Explain the work performed.]\n\n## Results\n[Insert verified baseline, outcome, measurement period, and limitations.]"
+        elif content_type == "Newsletter":
+            content = newsletter
+        else:
+            content = blog_post
+        return traced_result("ContentMarketing", inputs, {
+            "topic": topic, "content_type": content_type, "content": content,
+            "output_mode": "Editable template, not researched AI content. Replace placeholders and verify all claims.",
+            "next_action": "Add verified examples and edit the draft before publication."
+        })
 
 
 class SocialMediaAgent:
@@ -1204,14 +1012,8 @@ class VCPitchAgent:
         
         valuation = revenue * multiplier * (1 + growth/100)
         
-        investors = [
-            {"name": "Sequoia Capital", "stage": "Seed", "check_size": "$500k-2M", "email": "info@sequoiacap.com"},
-            {"name": "Y Combinator", "stage": "Pre-seed", "check_size": "$125k-500k", "email": "apply@ycombinator.com"},
-            {"name": "Accel", "stage": "Seed", "check_size": "$1M-5M", "email": "contact@accel.com"},
-            {"name": "Andreessen Horowitz", "stage": "Seed", "check_size": "$1M-10M", "email": "info@a16z.com"},
-            {"name": "Index Ventures", "stage": "Seed", "check_size": "$500k-3M", "email": "hello@indexventures.com"}
-        ]
-        
+        investors = []  # No verified investor directory is connected.
+
         deck_outline = [
             "1. Problem Statement",
             "2. Solution (Product Demo)",
@@ -1328,6 +1130,9 @@ class MVPBuilderAgent:
             }
         }
         
+        requested_features = [x.strip() for x in re.split(r"[,\n]+", features) if x.strip()]
+        if not requested_features:
+            raise ValueError("Enter at least one MVP feature.")
         stack = tech_stacks.get(product_type, tech_stacks["Web App"])
         
         architecture = {
@@ -1349,8 +1154,10 @@ class MVPBuilderAgent:
         arize.end_trace({})
         
         return {
+            "requested_features": requested_features,
+            "feature_plan": [{"feature": feature, "task": "Define acceptance criteria, implement, and test: " + feature} for feature in requested_features],
             "recommended_tech_stack": stack,
-            "architecture": architecture,
+            "example_architecture": architecture,
             "development_steps": [
                 "Week 1-2: Setup project & authentication",
                 "Week 3-4: Core features implementation",
@@ -1407,43 +1214,27 @@ class AstrologyAgent:
 
 
 class ProductivityCoachAgent:
-    """⏰ Daily planning and focus optimization"""
-    
     @staticmethod
-    def execute(inputs: dict) -> dict:
-        arize.start_trace("ProductivityCoach", "plan", inputs)
-        
-        work_hours = inputs.get("work_hours", 8)
-        priorities = inputs.get("priorities", ["Product development", "Customer calls", "Strategy"])
-        
-        schedule = {
-            "8:00 - 9:00": "Deep work: Most important task",
-            "9:00 - 10:00": priorities[0] if priorities else "Core work",
-            "10:00 - 10:15": "Break",
-            "10:15 - 12:00": priorities[1] if len(priorities) > 1 else "Secondary task",
-            "12:00 - 13:00": "Lunch break",
-            "13:00 - 15:00": priorities[2] if len(priorities) > 2 else "Meetings/Emails",
-            "15:00 - 16:00": "Deep work session",
-            "16:00 - 17:00": "Planning for tomorrow"
-        }
-        
-        tips = [
-            "Use Pomodoro technique: 25 min work, 5 min break",
-            "Batch similar tasks together",
-            "Turn off notifications during deep work",
-            "Review your day each evening",
-            "Protect your mornings for important work"
-        ]
-        
-        arize.log_metric("work_hours", work_hours)
-        arize.end_trace({})
-        
-        return {
-            "daily_schedule": schedule,
-            "productivity_tips": tips,
-            "recommended_focus_time": f"{work_hours - 2} hours of deep work",
-            "next_action": "Block calendar for deep work sessions"
-        }
+    def execute(inputs):
+        hours = nonnegative(inputs, "work_hours")
+        if not 0.25 <= hours <= 12:
+            raise ValueError("Available work hours must be between 0.25 and 12.")
+        value = inputs.get("priorities", "")
+        priorities = [x.strip() for x in re.split(r"[,\n]+", value) if x.strip()] if isinstance(value, str) else [str(x).strip() for x in value if str(x).strip()]
+        if not priorities:
+            raise ValueError("Enter at least one priority.")
+        total = round(hours * 60)
+        if len(priorities) > total:
+            raise ValueError("Enter fewer priorities or increase available time.")
+        allocation, remainder = divmod(total, len(priorities))
+        current = 9 * 60
+        schedule = []
+        for i, priority in enumerate(priorities):
+            minutes = allocation + (i < remainder)
+            end = current + minutes
+            schedule.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{end//60:02d}:{end%60:02d}", "task": priority, "minutes": minutes})
+            current = end
+        return traced_result("ProductivityCoach", inputs, {"daily_schedule": schedule, "allocated_minutes": total, "assumptions": "Starts at 09:00 and allocates available time evenly. Breaks are not included.", "next_action": "Adjust priorities and reserve break time before adding this plan to your calendar."})
 
 # ==================== AGENT REGISTRY ====================
 AGENTS = {
@@ -1492,19 +1283,19 @@ AGENTS = {
 
 # ==================== STREAMLIT UI ====================
 st.markdown('<p class="main-title">🚀 FoundersAgent - Complete AI Co-Founder</p>', unsafe_allow_html=True)
-st.markdown('<p style="text-align: center; color: #94a3b8;">24 AI Agents That Take Action — Not Just Chat | Built with Arize MCP</p>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center; color: #94a3b8;">24 task helpers: templates, calculations, and planning tools</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 # Sidebar
 with st.sidebar:
     st.markdown("### 🏆 Hackathon Submission")
-    st.markdown("**Partner:** Arize MCP")
-    st.markdown("**Built with:** Google Cloud Agent Builder")
+    st.caption("Prototype: local trace viewer")
+    st.caption("No remote Arize or Google Cloud integration is configured here.")
     st.markdown("---")
     
     st.markdown("### 📊 API Status")
     arize_key = os.getenv("ARIZE_API_KEY")
-    st.markdown(f"🔵 Arize: {'✅ Configured' if arize_key else '❌ Missing'}")
+    st.caption("Tracing: session memory only")
     st.markdown("---")
     
     st.markdown("### 📈 Arize Traces")
@@ -1550,7 +1341,7 @@ category_agents = {
 filtered_agents = category_agents.get(selected_category, [])
 
 st.markdown(f"### 🤖 Select an Agent - {selected_category}")
-st.markdown("*Each agent performs a real-world task*")
+st.caption("Some helpers return templates or plans. External actions require separate integrations.")
 
 # Agent selection grid
 cols = st.columns(4)
@@ -1566,6 +1357,9 @@ st.markdown("---")
 
 # Input Form
 selected_agent = st.session_state.get("selected_agent")
+if selected_agent not in filtered_agents:
+    selected_agent = None
+    st.session_state.pop("selected_agent", None)
 
 if selected_agent:
     agent_info = AGENTS[selected_agent]
@@ -1614,19 +1408,20 @@ if selected_agent:
     elif selected_agent == "Tax Filing":
         col1, col2 = st.columns(2)
         with col1:
-            inputs["revenue"] = st.number_input("Annual Revenue (USD)", value=100000)
-            inputs["expenses"] = st.number_input("Annual Expenses (USD)", value=40000)
+            inputs["revenue"] = st.number_input("Annual Revenue (USD)", min_value=0, value=100000)
+            inputs["expenses"] = st.number_input("Annual Expenses (USD)", min_value=0, value=40000)
         with col2:
             inputs["country"] = st.selectbox("Country", ["India", "USA", "UK", "Singapore"])
+            inputs["tax_rate"] = st.number_input("Assumed tax rate (%) — verify independently", min_value=0.0, max_value=100.0, value=0.0)
     
     elif selected_agent == "CFO Analysis":
         col1, col2, col3 = st.columns(3)
         with col1:
-            inputs["monthly_burn"] = st.number_input("Monthly Burn Rate (USD)", value=50000)
+            inputs["monthly_burn"] = st.number_input("Monthly expenses before revenue (USD)", min_value=0, value=50000)
         with col2:
-            inputs["cash_balance"] = st.number_input("Cash Balance (USD)", value=500000)
+            inputs["cash_balance"] = st.number_input("Cash Balance (USD)", min_value=0, value=500000)
         with col3:
-            inputs["monthly_revenue"] = st.number_input("Monthly Revenue (USD)", value=10000)
+            inputs["monthly_revenue"] = st.number_input("Monthly Revenue (USD)", min_value=0, value=10000)
     
     elif selected_agent == "Invoice Generator":
         col1, col2 = st.columns(2)
@@ -1647,14 +1442,17 @@ if selected_agent:
         inputs["job_type"] = st.selectbox("Job Type", ["Full-time", "Part-time", "Contract"])
     
     elif selected_agent == "Resume Screener":
-        inputs["job_requirements"] = st.text_area("Job Requirements", placeholder="Python, 3+ years experience, startup mindset")
+        inputs["job_requirements"] = st.text_area("Required skills (comma-separated)", placeholder="Python, React, AWS")
+        inputs["resumes"] = st.text_area("Candidate resumes", placeholder="Candidate name on the first line, then resume text. Separate candidates with a line containing ---.", height=240)
     
     elif selected_agent == "Payslip":
         col1, col2 = st.columns(2)
         with col1:
             inputs["employee_name"] = st.text_input("Employee Name", "John Doe")
         with col2:
-            inputs["salary"] = st.number_input("Monthly Salary (₹)", value=50000)
+            inputs["salary"] = st.number_input("Monthly gross salary (INR)", min_value=0, value=50000)
+            inputs["deductions"] = st.number_input("Total deductions (INR)", min_value=0, value=0)
+            inputs["month"] = st.text_input("Payroll month", datetime.now().strftime("%B %Y"))
     
     elif selected_agent == "Employee Onboarding":
         col1, col2 = st.columns(2)
@@ -1691,7 +1489,7 @@ if selected_agent:
     elif selected_agent == "VC Pitch":
         col1, col2, col3 = st.columns(3)
         with col1:
-            inputs["revenue"] = st.number_input("Annual Revenue (USD)", value=100000)
+            inputs["revenue"] = st.number_input("Annual Revenue (USD)", min_value=0, value=100000)
         with col2:
             inputs["growth_rate"] = st.number_input("Growth Rate (%)", value=50)
         with col3:
@@ -1700,7 +1498,7 @@ if selected_agent:
     elif selected_agent == "Valuation":
         col1, col2, col3 = st.columns(3)
         with col1:
-            inputs["revenue"] = st.number_input("Annual Revenue (USD)", value=100000)
+            inputs["revenue"] = st.number_input("Annual Revenue (USD)", min_value=0, value=100000)
         with col2:
             inputs["growth_rate"] = st.number_input("Growth Rate (%)", value=50)
         with col3:
@@ -1722,148 +1520,49 @@ if selected_agent:
     elif selected_agent == "Productivity Coach":
         col1, col2 = st.columns(2)
         with col1:
-            inputs["work_hours"] = st.number_input("Available Work Hours/Day", value=8)
+            inputs["work_hours"] = st.number_input("Available work hours/day", min_value=0.25, max_value=12.0, value=8.0, step=0.25)
         with col2:
             inputs["priorities"] = st.text_area("Top Priorities", placeholder="Product development, Customer calls, Marketing")
     
-    # Execute Button
+    # Results remain visible after downloads, widget changes, and reruns.
+    saved_results = st.session_state.setdefault("agent_results", {})
     if st.button(f"🚀 Execute {selected_agent}", use_container_width=True):
-        with st.spinner(f"🔄 Executing {selected_agent}..."):
-            agent_class = agent_info["agent"]
-            result = agent_class.execute(inputs)
-            
-            # Add Arize traces
-            if "arize_traces" not in result:
-                result["arize_traces"] = arize.get_traces()
-            
-            st.session_state.last_result = result
-            
-            st.markdown("---")
-            st.markdown("### ✅ Result")
-            
-            # Display result based on agent type
-            if selected_agent == "Idea Generator":
-                for idea in result.get("ideas", []):
-                    with st.expander(f"💡 {idea['name']}"):
-                        st.markdown(f"**Pain Point:** {idea.get('pain_point', 'N/A')}")
-                        st.markdown(f"**Revenue Model:** {idea.get('revenue_model', 'N/A')}")
-                        st.markdown(f"**MVP Suggestion:** {idea.get('mvp', 'N/A')}")
-                        st.markdown(f"**Market Size:** {idea.get('market_size', 'N/A')}")
-            
-            elif selected_agent == "Idea Scoring":
-                score = result.get("score", 0)
-                c1, c2, c3 = st.columns([1, 2, 1])
-                with c2:
-                    st.markdown(f'<div class="score-card"><div class="score-number">{score}/100</div></div>', unsafe_allow_html=True)
-                st.markdown(f"**Verdict:** {result.get('verdict')}")
-                st.markdown(f"**TAM:** {result.get('tam')} | **SAM:** {result.get('sam')} | **SOM:** {result.get('som')}")
-                st.markdown("**Score Breakdown:**")
-                for category, cat_score in result.get("breakdown", {}).items():
-                    st.markdown(f"• {category}: {cat_score}/100")
-                st.markdown("**Action Plan:**")
-                for action in result.get("action_plan", []):
-                    st.markdown(f"• {action}")
-            
-            elif selected_agent == "Payslip" or selected_agent == "Invoice Generator":
-                if "payslip_html" in result:
-                    st.components.v1.html(result["payslip_html"], height=400)
-                if "invoice_html" in result:
-                    st.components.v1.html(result["invoice_html"], height=500)
-            
-            elif selected_agent == "Job Posting":
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f'<a href="{result.get("linkedin_url")}" target="_blank" style="background:#0077B5; color:white; padding:12px; border-radius:8px; text-decoration:none; display:block; text-align:center;">📱 Post to LinkedIn</a>', unsafe_allow_html=True)
-                with col2:
-                    st.markdown(f'<a href="{result.get("naukri_url")}" target="_blank" style="background:#E9542E; color:white; padding:12px; border-radius:8px; text-decoration:none; display:block; text-align:center;">📋 Post to Naukri</a>', unsafe_allow_html=True)
-                st.code(result.get("description", ""), language="markdown")
-            
-            elif selected_agent == "Social Media":
-                with st.expander("🐦 Twitter/X Post"):
-                    st.code(result.get("twitter", ""))
-                with st.expander("💼 LinkedIn Post"):
-                    st.code(result.get("linkedin", ""))
-                with st.expander("📸 Instagram Caption"):
-                    st.code(result.get("instagram", ""))
-            
-            elif selected_agent == "Content Marketing":
-                with st.expander("📝 Blog Post"):
-                    st.markdown(result.get("blog_post", ""))
-                with st.expander("📧 Newsletter"):
-                    st.markdown(result.get("newsletter", ""))
-            
-            elif selected_agent == "Legal Compliance":
-                st.code(result.get("content", ""), language="markdown")
-                st.info("⚠️ This is a template. Please consult a lawyer before using.")
-            
-            elif selected_agent == "Company Registration":
-                st.markdown(f"**Official Website:** [{result.get('website')}]({result.get('website')})")
-                st.markdown(f"**Helpline:** {result.get('helpline')}")
-                st.markdown(f"**Timeframe:** {result.get('timeframe')}")
-                st.markdown(f"**Estimated Fees:** {result.get('estimated_fees')}")
-                st.markdown("**Required Forms:**")
-                for f in result.get("forms", []):
-                    st.markdown(f"• [{f['name']}]({f['url']}) - {f['fee']}")
-                st.markdown("**Steps:**")
-                for step in result.get("steps", []):
-                    st.markdown(f"• {step}")
-            
-            elif selected_agent == "CFO Analysis":
-                st.markdown(f"**Monthly Burn:** ${result.get('monthly_burn'):,}")
-                st.markdown(f"**Cash Balance:** ${result.get('cash_balance'):,}")
-                st.markdown(f"**Runway:** {result.get('runway_months')} months")
-                st.markdown(f"**Survival Probability:** {result.get('survival_probability')}%")
-                with st.expander("📊 Cash Flow Forecast"):
-                    for forecast in result.get("cash_flow_forecast", []):
-                        st.markdown(f"Month {forecast['month']}: ${forecast['cash_balance']:,.0f}")
-            
-            elif selected_agent == "MVP Builder":
-                st.markdown("**Recommended Tech Stack:**")
-                for key, value in result.get("recommended_tech_stack", {}).items():
-                    st.markdown(f"• **{key.title()}:** {value}")
-            
+        saved_results.pop(selected_agent, None)
+        try:
+            for key in agent_info["inputs"]:
+                if key not in inputs or isinstance(inputs[key], str) and not inputs[key].strip():
+                    raise ValueError(f"Please enter {key.replace('_', ' ')}.")
+            with st.spinner(f"Executing {selected_agent}..."):
+                result = agent_info["agent"].execute(inputs)
+                # Remaining static helpers explicitly identify their output as examples.
+                result.setdefault("output_mode", "Template/example output. Verify all assumptions and figures before use.")
+                result["arize_traces"] = [dict(t) for t in arize.get_traces()[-1:]]
+                saved_results[selected_agent] = result
+                st.session_state.last_result = result
+        except ValueError as exc:
+            st.warning(str(exc))
+        except Exception:
+            st.error("This task could not complete. Check your inputs and try again.")
+    result = saved_results.get(selected_agent)
+    if result is not None:
+        st.markdown("### Result")
+        st.info(result["output_mode"])
+        for key, value in result.items():
+            if key in ("output_mode", "arize_traces"):
+                continue
+            st.markdown(f"**{key.replace('_', ' ').title()}**")
+            if key.endswith("_html"):
+                st.components.v1.html(value, height=500, scrolling=True)
+            elif isinstance(value, (dict, list)):
+                st.json(value)
             else:
-                # Generic display for other agents
-                for key, value in result.items():
-                    if key not in ["arize_traces", "next_action"] and not key.endswith("_html"):
-                        if isinstance(value, list):
-                            st.markdown(f"**{key.replace('_', ' ').title()}:**")
-                            for item in value[:5]:
-                                if isinstance(item, dict):
-                                    st.markdown(f"• {item.get('name', item)}")
-                                else:
-                                    st.markdown(f"• {item}")
-                        elif isinstance(value, dict):
-                            st.markdown(f"**{key.replace('_', ' ').title()}:**")
-                            for k, v in list(value.items())[:5]:
-                                st.markdown(f"• {k}: {v}")
-                        else:
-                            st.markdown(f"**{key.replace('_', ' ').title()}:** {value}")
-            
-            st.info(f"📌 **Next Action:** {result.get('next_action', 'Review and act on recommendations')}")
-            
-            # Arize Traces
-            with st.expander("📊 View Arize MCP Traces"):
-                traces = result.get("arize_traces", [])
-                if traces:
-                    for trace in traces:
-                        st.markdown(f"**Trace ID:** `{trace['trace_id']}`")
-                        st.markdown(f"**Action:** {trace['name']}")
-                        if trace.get("metrics"):
-                            st.markdown(f"**Metrics:** {trace['metrics']}")
-                        if trace.get("validations"):
-                            for v in trace["validations"]:
-                                status = "✅" if v["passed"] else "❌"
-                                st.markdown(f"{status} Validation: {v['name']} = {v['value']} (threshold: {v['threshold']})")
-                else:
-                    st.markdown("No traces recorded")
-            
-            # Download Report
-            report_json = json.dumps(result, indent=2, default=str)
-            st.download_button("📥 Download Report", report_json, f"{selected_agent.lower().replace(' ', '_')}_report.json", use_container_width=True)
+                st.write("Not available" if value is None else value)
+        with st.expander("Local execution traces"):
+            st.json(result.get("arize_traces", []))
+        st.download_button("Download report", json.dumps(result, indent=2, default=str, allow_nan=False), f"{selected_agent.lower().replace(' ', '_')}_report.json", mime="application/json")
 
 else:
     st.info("👈 Select a category and then an agent from above to get started!")
 
 st.markdown("---")
-st.caption("🏆 Hackathon Submission: Building Agents for Real-World Challenges | Built with Google Cloud Agent Builder + Arize MCP | 24 Action Agents")
+st.caption("FoundersAgent prototype: 24 task helpers. Traces and results persist for this browser session only.")

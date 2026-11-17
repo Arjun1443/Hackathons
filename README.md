@@ -8,7 +8,7 @@ FoundersAgent is a Python and Streamlit startup-assistance prototype that brings
 | Entry point | Purpose | Implementation | Report export |
 | --- | --- | --- | --- |
 | [app.py](app.py) | AI-assisted startup research with nine selectable agents | DeepSeek, LangGraph, LangChain, and optional search APIs | Plain text (`.txt`) |
-| [FoundersAgent.py](FoundersAgent.py) | Broader demonstration with 24 agent options across nine categories | Python rules, calculations, templates, and simulated outputs | JSON (`.json`) |
+| [FoundersAgent.py](FoundersAgent.py) | Broader demonstration with 24 agent options across nine categories | Python rules, calculations, templates, and evidence checklists | JSON (`.json`) |
 
 **Start with `FoundersAgent.py` for a demonstration without model credentials. Use `app.py` for DeepSeek-generated responses and optional external research.**
 
@@ -21,14 +21,14 @@ The two files have separate interfaces and execution paths. Selecting an agent r
 | Agent | Current behavior |
 | --- | --- |
 | Idea Evaluation | Combines optional trend, competitor, and market-validation searches with a weighted score and model-generated interpretation |
-| Market Research | Produces model-generated startup research |
-| Domain Purchase | Suggests a name and returns a demonstration availability result |
+| Market Research | Retrieves competitor and market evidence before drafting a report, with instructions to cite supplied sources |
+| Domain Suggestions | Uses the entered name to produce a registrar search link. Availability remains unverified |
 | VC Funding | Calculates a revenue-multiple valuation and generates funding guidance |
 | CA & Legal | Produces registration guidance from embedded country information and a model response |
-| Tax Filing | Calculates a simplified tax estimate and explains it |
-| Payslip Generator | Produces sample payroll data and an accompanying email draft |
+| Tax Filing | Estimates tax using annual inputs, the selected jurisdiction, and a rate entered by the user. Does not file returns |
+| Payslip Generator | Uses the entered employee, gross salary, deductions, and payroll month |
 | Astrology Support | Generates motivational astrology-themed content |
-| CRM Integration | Returns a sample lead record and suggested next steps |
+| CRM Integration | Uses the entered lead information to create a local draft. Does not write to a remote CRM |
 
 The interface provides agent selection cards, a startup description field, financial or location inputs where applicable, credential-status indicators, and downloadable text reports.
 
@@ -48,7 +48,9 @@ The interface provides agent selection cards, a startup description field, finan
 
 This version includes category selection, task-specific forms, structured results, invoice and payslip HTML previews, JSON downloads, and an in-memory trace viewer.
 
-**Implementation status:** many outputs use embedded examples, templates, or random values. For example, idea scores and TAM/SAM/SOM estimates in this version are simulated. Its `ArizeTracker` stores traces locally in memory; it does not send telemetry to Arize. Although the source labels mention Google Cloud Agent Builder and Arize MCP, this file does not implement those external integrations.
+**Implementation status:** the extended application contains templates and calculations, not 24 model-backed autonomous agents. Idea Scoring returns an evidence checklist instead of a random score. Problem Validation returns interview questions instead of fabricated social findings. Trademark and domain helpers explicitly say searches have not occurred. Resume Screener calculates literal skill coverage from pasted resumes. Static business and legal templates still need review.
+
+Reports and the last 50 local traces survive reruns within the current Streamlit session. No remote Arize, Google Cloud Agent Builder, registrar, CRM, or tax-filing integration is implemented.
 
 ## Technology stack
 
@@ -78,7 +80,7 @@ cd Hackathons
 python -m venv .venv
 ```
 
-Python 3.10 or newer is a reasonable starting point; the repository does not currently pin a tested Python or dependency version.
+Use Python 3.11 or newer (Python 3.12 recommended). The regression checks were run on Python 3.12. Top-level dependency versions are pinned in `requirements.txt`.
 
 ### 2. Activate the virtual environment
 
@@ -107,21 +109,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-The current `requirements.txt` contains only `streamlit` and `python-dotenv`. These cover the extended demo's third-party imports.
-
-**For the DeepSeek application, install its additional dependencies:**
-
-```bash
-python -m pip install langgraph langchain-deepseek langchain-core
-```
-
-**For optional external research tools:**
-
-```bash
-python -m pip install google-search-results tavily-python exa-py
-```
-
-The `google-search-results` package supplies the `serpapi.GoogleSearch` import used in this project. Dependency versions are unpinned, so provider SDK changes may require code adjustments.
+`requirements.txt` includes the Streamlit interface, DeepSeek/LangGraph dependencies, and optional research SDKs. The `google-search-results` distribution provides the `serpapi.GoogleSearch` import. API keys are still needed to use hosted services.
 
 ### 4. Choose an application
 
@@ -155,9 +143,9 @@ Open the local URL printed by Streamlit, usually [http://localhost:8501](http://
 | Variable | Required for | Behavior when missing |
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | All of `app.py` | The application stops with a configuration message |
-| `SERPAPI_API_KEY` | Google Trends tool in `app.py` | Returns a default trend score of 50 with an error indicator |
-| `TAVILY_API_KEY` | Competitor search in `app.py` | Returns an empty competitor list with an error indicator |
-| `EXA_API_KEY` | Market validation in `app.py` | Returns an empty product list with an error indicator |
+| `SERPAPI_API_KEY` | Google Trends tool in `app.py` | Returns an error indicator. Idea Evaluation refuses to produce a viability score |
+| `TAVILY_API_KEY` | Competitor search in `app.py` | Returns an empty competitor list with an error indicator. Idea Evaluation stops scoring |
+| `EXA_API_KEY` | Market validation in `app.py` | Returns an empty product list with an error indicator. Idea Evaluation stops scoring |
 
 `FoundersAgent.py` also reads `ARIZE_API_KEY` and `ARIZE_SPACE_KEY`, but its current tracker does not use them to connect to a remote service.
 
@@ -174,7 +162,7 @@ Use your own provider accounts and check their usage limits and charges. Keep cr
 4. Review the generated analysis, score, and any available research results.
 5. Use **Download Report** to save the text output.
 
-For **VC Funding** or **Tax Filing**, supply the financial inputs shown in the form. For **CA & Legal**, select a country and enter a city.
+For **VC Funding** or **Tax Filing**, supply annual financial inputs. Tax estimates also require an assumed rate and country. Payroll, CRM, and domain suggestions have dedicated input fields. For **CA & Legal**, select a country and enter a city.
 
 Each run starts with a new workflow state. Running Idea Evaluation first does not automatically pass its score into another agent.
 
@@ -186,7 +174,9 @@ Each run starts with a new workflow state. Running Idea Evaluation first does no
 4. Click **Execute**.
 5. Review the result and trace details, then download the JSON report.
 
-Treat example market figures, screening results, and generated scores as demonstration data.
+For Resume Screener, enter comma-separated required skills and paste each candidate name on its own first line followed by resume text. Separate candidates with a line containing `---`. The result measures skill keyword coverage only, not suitability or verified experience.
+
+For Productivity Coach, enter 0.25–12 hours and separate priorities with commas or newlines. For Payslip, enter gross salary and total deductions explicitly. Content Marketing returns the chosen template type, including a case-study outline. MVP Builder includes the features entered by the user.
 
 ## Idea scoring in `app.py`
 
@@ -201,12 +191,12 @@ Final score = (trend score × 0.30)
 
 | Component | Weight | Current basis |
 | --- | --- | --- |
-| Market trend | 30% | Trend-tool output, with a default of 50 when unavailable |
+| Market trend | 30% | Numeric timeline values from the trend provider |
 | Competition | 25% | Rule-based score from the number of competitor search results |
 | Market validation | 25% | Rule-based score from the number of similar-product results |
-| Innovation | 20% | Fixed value of 65 |
+| Innovation | 20% | Model assessment clamped to 0–100, with fallback 65 if parsing fails |
 
-A score can still be produced when research services are missing or fail. Search-result counts are rough proxies, and the innovation component is fixed. These scores are exploratory heuristics rather than validated predictions of startup success.
+Idea Evaluation reports insufficient evidence instead of scoring when a research tool returns an error. A successful empty search is still different from proof of no competition. Search-result counts and model innovation assessments remain rough heuristics, not validated predictions of startup success.
 
 ## Repository structure
 
@@ -215,14 +205,16 @@ A score can still be produced when research services are missing or fail. Search
 | [app.py](app.py) | Nine-agent DeepSeek application, tool definitions, workflow state, and Streamlit interface |
 | [FoundersAgent.py](FoundersAgent.py) | Independent 24-option demonstration application and local trace tracker |
 | [prompts.yaml](prompts.yaml) | Additional code-agent prompt templates; neither application currently loads this file |
-| [requirements.txt](requirements.txt) | Minimal dependencies for the extended demo |
+| [requirements.txt](requirements.txt) | Pinned top-level dependencies for both applications |
+| [test_agents.py](test_agents.py) | Offline logic regressions and a smoke check of all 24 helpers |
+| [test_ui.py](test_ui.py) | Streamlit interaction and report-persistence regressions |
 
 ## Current limitations
 
 - **External actions are demonstrations:** domain availability is not checked against a live registrar in `app.py`, CRM records are returned without a persistent CRM connection, and tax calculations do not submit filings.
-- **Sample payroll inputs:** `app.py` uses a hardcoded employee and salary in its payslip agent, even though the interface displays financial inputs.
-- **Simplified finance and legal logic:** registration information and tax rules are embedded in the source and may become outdated. The tax agent in `app.py` currently uses the USA jurisdiction.
-- **No persistent workspace:** there is no database-backed chat history, user account system, or shared cross-agent memory. The extended demo's trace list is created in memory and can reset on Streamlit reruns.
+- **Payroll drafts:** both applications use the supplied gross salary and deductions. They do not determine statutory payroll deductions automatically.
+- **Simplified finance and legal logic:** registration guidance remains embedded and can become outdated. Tax estimates use a user-supplied rate and selected country. They do not implement jurisdiction-specific law.
+- **No persistent workspace:** there is no database-backed chat history, user account system, or shared cross-agent memory. Reports and local traces persist only within the browser session and can disappear when the session ends or the server restarts.
 - **No guaranteed research accuracy:** model responses can contain unsupported claims, and optional search tools may return empty or default results.
 - **No automated MVP delivery:** the MVP Builder option provides planning output rather than deploying a complete application.
 - **No benchmark claims:** the repository does not establish measured accuracy, latency, or production reliability.
@@ -233,29 +225,43 @@ Verify business research against original sources and review generated financial
 
 | Problem | What to check |
 | --- | --- |
-| `ModuleNotFoundError: langgraph`, `langchain_deepseek`, or `langchain_core` | Activate the virtual environment and install the additional AI dependencies above |
+| `ModuleNotFoundError: langgraph`, `langchain_deepseek`, or `langchain_core` | Activate the virtual environment and install `requirements.txt` |
 | Missing DeepSeek key message | Place `.env` beside `app.py`, set `DEEPSEEK_API_KEY`, and restart Streamlit |
 | Empty competitor or market results | Check the relevant optional key, SDK installation, provider quota, and returned error details |
-| A score appears without configured search providers | Default values are being used; the score does not establish that live research succeeded |
+| Idea Evaluation reports insufficient evidence | Configure the missing research providers and retry. The application deliberately avoids scoring provider failures |
 | Provider authentication or quota error | Check account access, key validity, usage limits, and billing with that provider |
 | Port 8501 is occupied | Run with `--server.port 8502` and open the URL Streamlit prints |
-| Different results in the extended demo | Some results intentionally use random values |
-| Trace history disappears after interaction | The current tracker is recreated during script execution and has no persistent backend |
+| Idea Scoring returns no numeric score | The extended helper requires research evidence before a meaningful score can be produced |
+| Report history disappears after server restart | Session state is not a database. Persistent storage remains a roadmap item |
 
 ## Development roadmap
 
 Potential improvements for future development:
 
-- Pin and complete dependency requirements.
 - Replace simulated outputs with verified data sources.
 - Add persistent storage for reports, trace history, and shared agent state.
 - Connect real registrar, CRM, payroll, and observability services.
 - Introduce coordinated workflows with explicit handoffs between agents.
 - Validate structured model outputs and add provider retries and clearer failure handling.
-- Add meaningful tests for scoring, financial calculations, and workflow behavior.
 - Support additional document export formats.
 
 These are proposed improvements, not features already implemented.
+
+## Verification
+
+Run the offline logic regressions:
+
+```bash
+python -m unittest -v test_agents.py
+```
+
+After installing requirements, run the Streamlit interaction regressions:
+
+```bash
+python -m unittest -v test_ui.py
+```
+
+The tests exercise all 24 extended helpers and critical research-app flows without live API calls. They do not establish production readiness or validate provider credentials, external search quality, or hosted model accuracy.
 
 ## Contributing
 
@@ -264,3 +270,4 @@ Open an issue describing the problem or proposed improvement before making subst
 ## License
 
 No license file is currently included in the repository root. Add an explicit license before distributing the project under open-source terms.
+
