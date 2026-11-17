@@ -180,7 +180,9 @@ For Productivity Coach, enter 0.25–12 hours and separate priorities with comma
 
 ### Job posting with salary
 
-In **HR & People → Job Posting**, enter a minimum and maximum salary, currency, and pay period (year, month, or hour). Add role responsibilities, requirements, benefits, and an application email or careers URL. Choose LinkedIn, Naukri, and/or Indeed, then execute the helper.
+In **HR & People → Job Posting**, enter a minimum and maximum salary, currency, and pay period (year, month, or hour). Draft role responsibilities, required skills and experience, and benefits with the **Draft … with AI** buttons, or enter them manually. Every field remains editable. The application email/careers URL field has been removed. Choose LinkedIn, Naukri, and/or Indeed, then execute the helper.
+
+AI drafting uses the existing `DEEPSEEK_API_KEY` from `.env` or deployment secrets and the `deepseek-chat` model. It runs only when a draft button is clicked, uses the entered job context and current text, and replaces only the chosen section. Missing credentials or request failures leave the existing text intact. Manual editing and the rest of the extended application do not require a key. Review benefits suggestions before offering them to candidates.
 
 The result provides a copyable description, a text download, and buttons to open the selected platform's official employer posting page. Sign in to the employer account, paste the draft, complete any remaining fields, and publish there. These buttons do not prefill or submit forms, purchase listings, or report publication success. A salary range of zero or a minimum above the maximum is rejected.
 

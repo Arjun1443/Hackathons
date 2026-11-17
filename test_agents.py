@@ -16,7 +16,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TypedDict, List
 from uuid import uuid4
-from types import SimpleNamespace
+from types import SimpleNamespace, ModuleType
+import os
+import sys
+from unittest.mock import patch
 
 ROOT = Path(__file__).parent
 
@@ -65,10 +68,43 @@ class AgentTests(unittest.TestCase):
         result = self.execute('JobPostingAgent', job_title='AI Trainer', company='AIQUBIX', location='Remote', salary_min=60000, salary_max=90000, salary_currency='INR', salary_period='month', responsibilities='Teach Python', requirements='Python and ML', benefits='Flexible hours', application_contact='hiring@example.com')
         self.assertIn('INR 60,000.00 – 90,000.00 per month', result['description'])
         self.assertIn('Teach Python', result['description'])
-        self.assertIn('hiring@example.com', result['description'])
+        self.assertNotIn('hiring@example.com', result['description'])
+        self.assertNotIn('How to apply', result['description'])
         self.assertEqual([x['platform'] for x in result['posting_options']], ['LinkedIn', 'Naukri', 'Indeed'])
         self.assertTrue(all(x['status']=='not_published' for x in result['posting_options']))
         self.assertNotIn('sharing/share-offsite', result['posting_options'][0]['url'])
+
+    def test_ai_job_drafting_uses_context_and_marks_benefits_as_proposals(self):
+        module = ModuleType('langchain_deepseek')
+        calls = []
+        class FakeClient:
+            def __init__(self, **kwargs):
+                pass
+            def invoke(self, messages):
+                calls.append(json.loads(messages[-1].content))
+                return SimpleNamespace(content='- Teach Python and review practical projects')
+        module.ChatDeepSeek = FakeClient
+        messages = ModuleType('langchain_core.messages')
+        messages.SystemMessage = messages.HumanMessage = Message
+        core = ModuleType('langchain_core')
+        core.messages = messages
+        context = {'job_title':'AI Trainer', 'company':'AIQUBIX', 'location':'Remote', 'job_type':'Part-time'}
+        with patch.dict(os.environ, {'DEEPSEEK_API_KEY':'test-placeholder'}), patch.dict(sys.modules, {'langchain_deepseek':module,'langchain_core':core,'langchain_core.messages':messages}):
+            for section in ('responsibilities', 'requirements', 'benefits'):
+                result = self.demo['draft_job_section'](section, context, 'Keep this draft relevant')
+                self.assertIn('Python', result)
+                self.assertEqual(calls[-1]['job']['job_title'], 'AI Trainer')
+                self.assertEqual(calls[-1]['existing_draft'], 'Keep this draft relevant')
+                if section == 'benefits':
+                    self.assertIn('confirm before publishing', result)
+
+    def test_ai_job_drafting_rejects_missing_key_or_empty_output(self):
+        with patch.dict(os.environ, {'DEEPSEEK_API_KEY':''}), self.assertRaises(ValueError):
+            self.demo['draft_job_section']('responsibilities', {'job_title':'Trainer'})
+        with self.assertRaises(ValueError):
+            self.demo['draft_job_section']('unknown', {'job_title':'Trainer'})
+        with self.assertRaises(ValueError):
+            self.demo['draft_job_section']('responsibilities', {'job_title':''})
 
     def test_job_posting_rejects_invalid_salary_and_platforms(self):
         base = dict(job_title='Trainer', company='AIQUBIX', location='Remote', salary_min=100, salary_max=200)

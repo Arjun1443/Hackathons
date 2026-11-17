@@ -3,6 +3,7 @@ import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 from streamlit.testing.v1 import AppTest
 
 class InterfaceTests(unittest.TestCase):
@@ -55,6 +56,55 @@ class InterfaceTests(unittest.TestCase):
         assert at.warning and 'Payslip' not in at.session_state['agent_results']
         assert not at.exception
         print('PASS: invalid payroll gives a warning and clears the stale result')
+
+    @patch.dict(os.environ, clear=False)
+    def test_ai_job_sections_remain_editable_and_application_field_is_removed(self):
+        os.environ['DEEPSEEK_API_KEY'] = 'offline-test-placeholder'
+        at = AppTest.from_file(str(Path(__file__).with_name('FoundersAgent.py')), default_timeout=20).run()
+        at.selectbox[0].select('HR & People').run()
+        at.button(key='Job Posting').click().run()
+        assert not any(x.label == 'Application email or careers URL' for x in at.text_input)
+        with patch('langchain_deepseek.ChatDeepSeek') as client:
+            for field, label in [('responsibilities','Role responsibilities'), ('requirements','Required skills and experience'), ('benefits','Benefits offered')]:
+                client.return_value.invoke.return_value = SimpleNamespace(content='Draft for ' + field)
+                at.button(key='job_ai_' + field).click().run()
+                assert not at.exception, [x.message for x in at.exception]
+                widget = next(x for x in at.text_area if x.label == label)
+                assert 'Draft for ' + field in widget.value
+                widget.set_value('My edited ' + field).run()
+                assert not at.exception
+            for field, label in [('responsibilities','Role responsibilities'), ('requirements','Required skills and experience'), ('benefits','Benefits offered')]:
+                assert next(x for x in at.text_area if x.label == label).value == 'My edited ' + field
+            client.return_value.invoke.return_value = SimpleNamespace(content='')
+            at.button(key='job_ai_requirements').click().run()
+            assert at.warning
+            assert next(x for x in at.text_area if x.label == 'Required skills and experience').value == 'My edited requirements'
+            client.return_value.invoke.side_effect = RuntimeError('private-provider-details')
+            at.button(key='job_ai_benefits').click().run()
+            assert at.error
+            assert 'private-provider-details' not in at.error[0].value
+            assert next(x for x in at.text_area if x.label == 'Benefits offered').value == 'My edited benefits'
+        next(x for x in at.button if x.label.startswith('🚀 Execute')).click().run()
+        assert not at.exception
+        description = at.session_state['agent_results']['Job Posting']['description']
+        for field in ['responsibilities','requirements','benefits']:
+            assert 'My edited ' + field in description
+        assert 'How to apply' not in description
+        at.run()
+        assert not at.exception
+        assert next(x for x in at.text_area if x.label == 'Role responsibilities').value == 'My edited responsibilities'
+
+    @patch.dict(os.environ, clear=False)
+    def test_ai_job_section_missing_key_preserves_manual_text(self):
+        os.environ['DEEPSEEK_API_KEY'] = ''
+        at = AppTest.from_file(str(Path(__file__).with_name('FoundersAgent.py')), default_timeout=15).run()
+        at.selectbox[0].select('HR & People').run()
+        at.button(key='Job Posting').click().run()
+        next(x for x in at.text_area if x.label == 'Role responsibilities').set_value('Teach Python').run()
+        at.button(key='job_ai_responsibilities').click().run()
+        assert at.warning
+        assert not at.exception
+        assert next(x for x in at.text_area if x.label == 'Role responsibilities').value == 'Teach Python'
 
     @patch.dict(os.environ, clear=False)
     def test_research_offline_flows_and_persistence(self):
